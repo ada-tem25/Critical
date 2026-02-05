@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Critical - Test Interface</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Critical.</h1>
+            <p class="subtitle">Fact-checking en temps réel</p>
+        </header>
+
+        <main>
+            <section class="input-section">
+                <button id="mic-button" class="mic-button">
+                    <span class="mic-icon">🎤</span>
+                    <span class="mic-text">Appuyer pour parler</span>
+                </button>
+                <div id="status" class="status">Prêt</div>
+            </section>
+
+            <section class="transcription-section">
+                <h2>Transcription</h2>
+                <div id="transcription" class="transcription-box">
+                    <span class="placeholder">La transcription apparaîtra ici...</span>
+                </div>
+            </section>
+
+            <section class="result-section" id="result-section" style="display: none;">
+                <h2>Résultat</h2>
+                <div id="result" class="result-box"></div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Interface de test locale</p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
