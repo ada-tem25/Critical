@@ -2,6 +2,7 @@ import os
 import asyncio
 import threading
 import time
+import json
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,21 +17,14 @@ app = FastAPI()
 
 # ============== CONFIGURATION ==============
 # Langue par défaut si la détection échoue
-DEFAULT_LANGUAGE = "fr"
+DEFAULT_LANGUAGE = "fr" #--> Sera plus tard un paramètre de l'utilisateur
 
 # Durée de collecte d'audio pour la détection de langue (secondes)
 # On collecte l'audio pendant ce temps avant de détecter la langue
-LANGUAGE_DETECTION_DURATION = 3.0
+LANGUAGE_DETECTION_DURATION = 4.0
 
-# Timeout maximum pour la détection (si l'utilisateur ne parle pas)
-LANGUAGE_DETECTION_TIMEOUT = 15.0
-
-# Taille minimale du buffer audio pour tenter la détection (bytes)
-# En dessous de ce seuil, on assume qu'il n'y a pas eu de parole
-AUDIO_BUFFER_MIN_SIZE = 20000
-
-# Timeout d'inactivité totale - arrête l'écoute si aucun son pendant ce temps (secondes)
-INACTIVITY_TIMEOUT = 30.0
+# Nombre de transcriptions vides consécutives avant d'arrêter (silence détecté par Deepgram)
+MAX_EMPTY_CHUNKS = 15
 # ============================================
 
 # CORS pour le développement local
@@ -53,9 +47,11 @@ async def root():
 
 
 def detect_language_sync(deepgram: DeepgramClient, audio_buffer: bytes) -> str:
-    """Détecte la langue à partir d'un buffer audio en utilisant l'API pre-recorded (synchrone)."""
+    """
+    Détecte la langue à partir d'un buffer audio en utilisant l'API pre-recorded.
+    Retourne la langue par défaut si aucune parole n'est détectée (transcription vide).
+    """
     try:
-        # Appeler l'API pre-recorded avec détection de langue
         response = deepgram.listen.v1.media.transcribe_file(
             request=audio_buffer,
             model="nova-2",
@@ -63,17 +59,24 @@ def detect_language_sync(deepgram: DeepgramClient, audio_buffer: bytes) -> str:
             punctuate=True,
         )
 
-        # Extraire la langue détectée depuis response.results.channels[0].detected_language
         if hasattr(response, 'results') and response.results:
             channels = getattr(response.results, 'channels', None)
             if channels and len(channels) > 0:
                 channel = channels[0]
-                if hasattr(channel, 'detected_language') and channel.detected_language:
-                    lang = channel.detected_language
-                    print(f"Langue détectée: {lang}")
-                    return lang
+                alternatives = getattr(channel, 'alternatives', None)
 
-        print(f"Langue non détectée, fallback sur '{DEFAULT_LANGUAGE}'")
+                # Vérifier si la transcription est non vide (= quelqu'un a parlé)
+                if alternatives and len(alternatives) > 0:
+                    transcript = getattr(alternatives[0], 'transcript', '').strip()
+                    if transcript:
+                        # Transcription non vide = parole détectée
+                        lang = getattr(channel, 'detected_language', None)
+                        if lang:
+                            print(f"Parole détectée: '{transcript[:50]}...' -> Langue: {lang}")
+                            return lang
+
+        # Aucune transcription = pas de parole = langue par défaut
+        print(f"Pas de parole détectée, utilisation de la langue par défaut: {DEFAULT_LANGUAGE}")
         return DEFAULT_LANGUAGE
     except Exception as e:
         print(f"Erreur détection langue: {e}")
@@ -120,48 +123,30 @@ async def websocket_transcribe(websocket: WebSocket):
 
             # Fin de la collecte après LANGUAGE_DETECTION_DURATION secondes
             if elapsed >= LANGUAGE_DETECTION_DURATION:
-                print(f"Fin collecte après {elapsed:.1f}s - {len(audio_buffer)} bytes collectés")
-                break
-
-            # Timeout de sécurité
-            if elapsed > LANGUAGE_DETECTION_TIMEOUT:
-                print(f"Timeout détection langue après {elapsed:.1f}s")
+                print(f"Fin collecte après {elapsed:.1f}s")
                 break
 
             try:
                 data = await asyncio.wait_for(websocket.receive_bytes(), timeout=0.5)
                 audio_buffer.extend(data)
-
             except asyncio.TimeoutError:
                 continue
             except WebSocketDisconnect:
                 print("Client déconnecté pendant la détection")
                 return
 
-        # Décider si on a assez d'audio pour détecter la langue
-        if len(audio_buffer) < AUDIO_BUFFER_MIN_SIZE:
-            # Pas assez d'audio, fallback sur la langue par défaut
-            print(f"Buffer trop petit ({len(audio_buffer)} bytes < {AUDIO_BUFFER_MIN_SIZE}), fallback sur '{DEFAULT_LANGUAGE}'")
-            detected_language = DEFAULT_LANGUAGE
-            await websocket.send_json({
-                "status": "language_detected",
-                "language": detected_language,
-                "message": f"Langue par défaut: {detected_language}"
-            })
-        else:
-            # Détecter la langue (exécuté dans un thread pour ne pas bloquer)
-            print(f"Appel API détection langue ({len(audio_buffer)} bytes d'audio)")
-            detected_language = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: detect_language_sync(deepgram, bytes(audio_buffer))
-            )
+        # Détecter la langue (exécuté dans un thread pour ne pas bloquer)
+        detected_language = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: detect_language_sync(deepgram, bytes(audio_buffer))
+        )
 
-            # Informer le client de la langue détectée
-            await websocket.send_json({
-                "status": "language_detected",
-                "language": detected_language,
-                "message": f"Langue détectée: {detected_language}"
-            })
+        # Informer le client de la langue détectée
+        await websocket.send_json({
+            "status": "language_detected",
+            "language": detected_language,
+            "message": f"Langue détectée: {detected_language}"
+        })
 
         print(f"Démarrage streaming avec langue: {detected_language}")
 
@@ -177,13 +162,20 @@ async def websocket_transcribe(websocket: WebSocket):
         dg_context = deepgram.listen.v1.connect(**connection_options)
         dg_connection = dg_context.__enter__()
 
+        # Compteur de transcriptions vides consécutives
+        empty_chunk_count = [0]  # Liste pour pouvoir modifier dans la closure
+
         def on_message(message):
             if hasattr(message, 'channel') and hasattr(message.channel, 'alternatives'):
                 alternative = message.channel.alternatives[0]
                 transcript = alternative.transcript
-                if transcript:
+                is_final = getattr(message, 'is_final', True)
+
+                if transcript and transcript.strip():
+                    # Transcription non vide
+                    print(f"[Deepgram] {'FINAL' if is_final else 'interim'}: \"{transcript}\"")
+                    empty_chunk_count[0] = 0  # Reset du compteur
                     confidence = getattr(alternative, 'confidence', 1.0)
-                    is_final = getattr(message, 'is_final', True)
                     asyncio.run_coroutine_threadsafe(
                         transcription_queue.put({
                             "transcript": transcript,
@@ -192,6 +184,20 @@ async def websocket_transcribe(websocket: WebSocket):
                         }),
                         loop
                     )
+                else:
+                    # Transcription vide
+                    empty_chunk_count[0] += 1
+                    print(f"[Deepgram] Empty chunk ({empty_chunk_count[0]}/{MAX_EMPTY_CHUNKS})")
+
+                    if empty_chunk_count[0] >= MAX_EMPTY_CHUNKS:
+                        print(f"[Deepgram] {MAX_EMPTY_CHUNKS} chunks vides consécutifs - arrêt pour silence")
+                        asyncio.run_coroutine_threadsafe(
+                            transcription_queue.put({
+                                "status": "silence_timeout",
+                                "message": "Arrêt automatique : silence détecté"
+                            }),
+                            loop
+                        )
 
         def on_error(error):
             print(f"Deepgram error: {error}")
@@ -226,6 +232,19 @@ async def websocket_transcribe(websocket: WebSocket):
             while not should_stop.is_set():
                 try:
                     data = await asyncio.wait_for(transcription_queue.get(), timeout=0.1)
+
+                    # Gérer le silence_timeout
+                    if data.get("status") == "silence_timeout":
+                        print("Envoi du message timeout au frontend...")
+                        await websocket.send_json({
+                            "status": "timeout",
+                            "message": data.get("message", "Arrêt pour silence")
+                        })
+                        # Laisser le temps au message d'être transmis avant de fermer
+                        await asyncio.sleep(0.5)
+                        print("Message timeout envoyé, fermeture...")
+                        break
+
                     await websocket.send_json(data)
                 except asyncio.TimeoutError:
                     continue
@@ -241,10 +260,26 @@ async def websocket_transcribe(websocket: WebSocket):
             nonlocal last_audio_time
             while not should_stop.is_set():
                 try:
-                    data = await websocket.receive_bytes()
-                    dg_connection.send_media(data)
-                    # Mettre à jour le timestamp à chaque chunk reçu
-                    last_audio_time = time.time()
+                    message = await websocket.receive()
+
+                    if message["type"] == "websocket.receive":
+                        if "bytes" in message and message["bytes"]:
+                            # Audio data
+                            dg_connection.send_media(message["bytes"])
+                            last_audio_time = time.time()
+                        elif "text" in message and message["text"]:
+                            # JSON message (end_of_stream, etc.)
+                            data = json.loads(message["text"])
+                            if data.get("type") == "end_of_stream":
+                                print("End of stream reçu, finalisation...")
+                                # Attendre les dernières transcriptions de Deepgram
+                                await asyncio.sleep(1.5)
+                                await websocket.send_json({"status": "stream_complete"})
+                                print("Stream complete envoyé")
+                                break
+                    elif message["type"] == "websocket.disconnect":
+                        print("Client déconnecté")
+                        break
                 except WebSocketDisconnect:
                     print("Client déconnecté")
                     break
@@ -252,26 +287,15 @@ async def websocket_transcribe(websocket: WebSocket):
                     print(f"Erreur réception audio: {e}")
                     break
 
-        async def check_inactivity():
-            """Arrête l'écoute si inactif trop longtemps"""
-            while not should_stop.is_set():
-                await asyncio.sleep(1.0)
-                if time.time() - last_audio_time > INACTIVITY_TIMEOUT:
-                    print(f"Inactivité de {INACTIVITY_TIMEOUT}s - arrêt de l'écoute")
-                    await websocket.send_json({
-                        "status": "timeout",
-                        "message": f"Arrêt automatique après {int(INACTIVITY_TIMEOUT)}s d'inactivité"
-                    })
-                    break
+
 
         # Lancer les tâches en parallèle
         send_task = asyncio.create_task(send_transcriptions())
         receive_task = asyncio.create_task(receive_audio())
-        inactivity_task = asyncio.create_task(check_inactivity())
 
         # Attendre que l'une des tâches se termine
         done, pending = await asyncio.wait(
-            [send_task, receive_task, inactivity_task],
+            [send_task, receive_task],
             return_when=asyncio.FIRST_COMPLETED
         )
 

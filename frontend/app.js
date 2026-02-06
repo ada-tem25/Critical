@@ -100,7 +100,17 @@ async function startRecording() {
 
             if (data.status === 'timeout') {
                 updateStatus(data.message || 'Arrêt pour inactivité', 'error');
-                stopRecording();
+                // Ne pas envoyer end_of_stream car le backend a initié la fermeture
+                stopRecording(false);
+                return;
+            }
+
+            if (data.status === 'stream_complete') {
+                console.log('Stream complet, fermeture du socket');
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.close();
+                }
+                updateStatus('Prêt', '');
                 return;
             }
 
@@ -139,7 +149,8 @@ async function startRecording() {
     }
 }
 
-function stopRecording() {
+function stopRecording(sendEndOfStream = true) {
+    if (!isRecording) return;
     isRecording = false;
 
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
@@ -147,13 +158,26 @@ function stopRecording() {
         mediaRecorder.stream.getTracks().forEach(track => track.stop());
     }
 
-    if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.close();
-    }
-
     micButton.classList.remove('recording');
     micButton.querySelector('.mic-text').textContent = 'Appuyer pour parler';
-    updateStatus('Prêt', '');
+
+    // Signaler la fin du stream au backend (sauf si le backend a déjà initié la fermeture)
+    if (sendEndOfStream && socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'end_of_stream' }));
+        updateStatus('Finalisation de la transcription...', 'detecting');
+
+        // Timeout de sécurité : fermer après 3s si pas de réponse
+        setTimeout(() => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                console.log('Timeout: fermeture du socket');
+                socket.close();
+                updateStatus('Prêt', '');
+            }
+        }, 3000);
+    } else if (socket && socket.readyState === WebSocket.OPEN) {
+        // Backend a initié la fermeture, on ferme proprement le socket
+        socket.close();
+    }
 
     // Move any remaining interim to final
     if (interimTranscript) {
