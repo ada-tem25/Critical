@@ -11,21 +11,25 @@ from fastapi.responses import FileResponse
 from deepgram import DeepgramClient
 from deepgram.core.events import EventType
 
-load_dotenv()
-
 app = FastAPI()
 
-# ============== CONFIGURATION ==============
-# Langue par défaut si la détection échoue
-DEFAULT_LANGUAGE = "fr" #--> Sera plus tard un paramètre de l'utilisateur
+#First step is to retrieve the Deepgram API key and make sure it is well set
+load_dotenv()
+if os.getenv("DEEPGRAM_KEY") is None: raise ValueError("DEEPGRAM_KEY is not set")
+deepgram_api_key=os.getenv("DEEPGRAM_KEY")
 
-# Durée de collecte d'audio pour la détection de langue (secondes)
-# On collecte l'audio pendant ce temps avant de détecter la langue
+
+# ============== CONFIG ==============
+# Language detection duration (in seconds)
 LANGUAGE_DETECTION_DURATION = 4.0
 
-# Nombre de transcriptions vides consécutives avant d'arrêter (silence détecté par Deepgram)
+# If the language detection fails, falls back on this default language
+DEFAULT_LANGUAGE = "fr" # It will later become a user parameter
+
+# Max number of consecutive empty transcriptions before stopping the audio stream recording
 MAX_EMPTY_CHUNKS = 15
-# ============================================
+# ====================================
+
 
 # CORS pour le développement local
 app.add_middleware(
@@ -83,59 +87,48 @@ def detect_language_sync(deepgram: DeepgramClient, audio_buffer: bytes) -> str:
         return DEFAULT_LANGUAGE
 
 
+#The main endpoint that the frontend will call (through a websocket) when starting to record audio
 @app.websocket("/ws/transcribe")
 async def websocket_transcribe(websocket: WebSocket):
-    await websocket.accept()
+    await websocket.accept() #the backend must begin by accepting the connexion
 
-    print("=" * 50)
-    print("Client WebSocket connecté")
-    print("=" * 50)
+    deepgram = DeepgramClient(api_key=12)
 
-    api_key = os.getenv("DEEPGRAM_KEY")
-    if not api_key:
-        await websocket.send_json({"error": "DEEPGRAM_KEY non configurée"})
-        await websocket.close()
-        return
-
-    deepgram = DeepgramClient(api_key=api_key)
-
-    # Queue pour les transcriptions (thread-safe)
+    # Thread-safe way to put the transcriptions in a queue before sending them to the frontend
     transcription_queue = asyncio.Queue()
     loop = asyncio.get_event_loop()
 
-    # Flag pour arrêter proprement
+    # Proper way to define variables that will be accessed by multiple threads
     should_stop = threading.Event()
 
     dg_context = None
     dg_connection = None
 
     try:
-        # Phase 1: Collecter l'audio pendant quelques secondes pour détecter la langue
-        await websocket.send_json({"status": "detecting_language", "message": "Parlez pour détecter la langue..."})
-
+        
+        # ------- 1st step: Collect a few seconds of audio to detect the language (since deepgram cannot do this during an audio stream)
+        await websocket.send_json({"status": "detecting_language", "message": "Language detection..."})
         audio_buffer = bytearray()
         start_time = time.time()
 
-        print(f"Collecte audio pendant {LANGUAGE_DETECTION_DURATION}s...")
-
+        # Audio collection
         while True:
-            elapsed = time.time() - start_time
+            elapsed_time = time.time() - start_time
 
-            # Fin de la collecte après LANGUAGE_DETECTION_DURATION secondes
-            if elapsed >= LANGUAGE_DETECTION_DURATION:
-                print(f"Fin collecte après {elapsed:.1f}s")
+            if elapsed_time >= LANGUAGE_DETECTION_DURATION:
+                print(f"- language detection ended after {elapsed_time:.1f}s")
                 break
 
-            try:
+            try: #while the language detection time is not elapsed, the audio is continuously retreived
                 data = await asyncio.wait_for(websocket.receive_bytes(), timeout=0.5)
                 audio_buffer.extend(data)
             except asyncio.TimeoutError:
                 continue
             except WebSocketDisconnect:
-                print("Client déconnecté pendant la détection")
+                print("Client deconnection during detection")
                 return
 
-        # Détecter la langue (exécuté dans un thread pour ne pas bloquer)
+        # Language detection (executed in a separate thread)
         detected_language = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: detect_language_sync(deepgram, bytes(audio_buffer))

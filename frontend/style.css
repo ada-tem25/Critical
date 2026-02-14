@@ -232,3 +232,35 @@ footer {
     color: var(--text-light);
     font-size: 0.875rem;
 }
+
+.version {
+    opacity: 0.5;
+}
+
+/* Debug panel (pour les tests) */
+.debug-info {
+    color: var(--warning);
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.debug-panel {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: var(--bg);
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 0.75rem;
+    text-align: left;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.debug-panel strong {
+    color: var(--warning);
+}
+
+#debug-log {
+    color: var(--text-light);
+    margin-top: 0.5rem;
+}
