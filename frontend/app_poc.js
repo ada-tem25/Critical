@@ -173,7 +173,6 @@ async function startRecording() {
             }
 
             if (data.status === 'stream_complete') {
-                debugLog(`Stream terminé - Durée: ${data.audio_duration}s`);
                 if (socket && socket.readyState === WebSocket.OPEN) {
                     socket.close();
                 }
@@ -192,14 +191,9 @@ async function startRecording() {
                 }
                 updateTranscriptionDisplay();
 
-                // Afficher la langue si détectée
-                if (data.language) {
-                    debugLog(`Langue détectée: ${data.language}`);
-                }
-
-                // Warning si confiance faible
-                if (data.confidence && data.confidence < 0.8 && data.is_final) {
-                    debugLog(`Confiance faible: ${data.confidence.toFixed(2)}`);
+                // Warning si confiance faible --> En production, le notifier à l'utilisateur
+                if (data.transcription_confidence && data.transcription_confidence < 0.7 && data.is_final) {
+                    debugLog(`Low transcription confidence: ${data.transcription_confidence.toFixed(2)} --> Please make sure the signal can be heard well by the device.`);
                 }
             }
         };
