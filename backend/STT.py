@@ -23,8 +23,8 @@ SAMPLE_RATE = 16000
 # AssemblyAI audio streaming model (this one detects the language automatically, no need to specify it in the frontend)
 SPEECH_MODEL = "universal-streaming-multilingual"
 
-# Max number of consecutive empty transcriptions before considering it a silence and stopping the stream
-MAX_EMPTY_CHUNKS = 15
+# Time in seconds without any transcription before considering it a silence and stopping the stream
+SILENCE_TIMEOUT_SECONDS = 10
 
 # AssemblyAI WebSocket URL
 ASSEMBLYAI_WS_URL = "wss://streaming.assemblyai.com/v3/ws"
@@ -56,7 +56,7 @@ async def websocket_transcribe(websocket: WebSocket):
 
     assemblyai_ws = None
     should_stop = asyncio.Event()
-    empty_chunk_count = 0 # Consecutive empty chunks (to detect silence)
+    last_transcription_time = asyncio.get_event_loop().time()  # Timestamp de la dernière transcription reçue
     last_final_transcript = ""
 
     # Transcriptions received from AssemblyAI will be put in this queue before being sent to the frontend, to avoid concurrency issues between the tasks that receive from AssemblyAI and send to the client. The "send_transcriptions_to_client" task will read from this queue and send the transcriptions to the frontend in order.
@@ -84,7 +84,7 @@ async def websocket_transcribe(websocket: WebSocket):
             while not should_stop.is_set():
                 try:
                     message = await websocket.receive()
-
+                    
                     if message["type"] == "websocket.receive": # normal message, no error
                         if "bytes" in message and message["bytes"]: # the PCM16 audio of the message is in the "bytes" field
                             await assemblyai_ws.send(message["bytes"]) # it is sent directly to AssemblyAI without any processing, as AssemblyAI accepts raw PCM16 audio at 16kHz
@@ -106,8 +106,8 @@ async def websocket_transcribe(websocket: WebSocket):
         
         # 2nd concurrent task of the websocket: receives the transcriptions from AssemblyAI and puts them in the transcription_queue
         async def receive_transcriptions_from_assemblyai():
-            nonlocal empty_chunk_count, last_final_transcript # "nonlocal" is necessary to reassign variables that are defined in a parent function
-            
+            nonlocal last_transcription_time, last_final_transcript # "nonlocal" is necessary to reassign variables that are defined in a parent function
+
             try:
                 async for message in assemblyai_ws:
                     if should_stop.is_set():
@@ -115,7 +115,7 @@ async def websocket_transcribe(websocket: WebSocket):
 
                     data = json.loads(message)
                     msg_type = data.get("type")
-                    print(data)
+
                     if msg_type == "Begin": # Informs the frontend that the session has successfully started, so that it can update the UI accordingly (enable the "Stop" button, etc.)
                         await transcription_queue.put({
                             "status": "session_started",
@@ -132,7 +132,7 @@ async def websocket_transcribe(websocket: WebSocket):
                             detected_language = data.get("language_code") # Language retreival
 
                         if transcript and transcript.strip(): #Non-empty transcription
-                            empty_chunk_count = 0
+                            last_transcription_time = asyncio.get_event_loop().time()  # Reset du timer
 
                             if is_final and transcript == last_final_transcript: continue # Skip if the final transcript is the same as the last one (sometimes AssemblyAI can resend the same final transcript multiple times, which can cause duplicates in the frontend)
 
@@ -151,13 +151,6 @@ async def websocket_transcribe(websocket: WebSocket):
                                 "is_final": is_final,
                                 "language": detected_language
                             })
-                        else: # Empty transcription
-                            empty_chunk_count += 1
-                            print(f"[AssemblyAI] Empty chunk ({empty_chunk_count}/{MAX_EMPTY_CHUNKS})")
-
-                            if empty_chunk_count >= MAX_EMPTY_CHUNKS:
-                                print(f"[AssemblyAI] {MAX_EMPTY_CHUNKS} empty chunks detected, stopping stream for silence")
-                                await transcription_queue.put({"status": "silence_timeout"})
 
                     elif msg_type == "Termination": # When AssemblyAI signals the end of the stream
                         await transcription_queue.put({"status": "stream_complete"})
@@ -174,11 +167,11 @@ async def websocket_transcribe(websocket: WebSocket):
                 print(f"AssemblyAI unknown error: {e}")
                 await transcription_queue.put({"error": str(e)})
 
-        # 3rd concurrent task of the websocket: sends the transcriptions received from the transcription_queue to the frontend in real-time. 
+        # 3rd concurrent task of the websocket: sends the transcriptions received from the transcription_queue to the frontend in real-time.
         async def send_transcriptions_to_client():
             while not should_stop.is_set():
                 try:
-                    data = await asyncio.wait_for(transcription_queue.get(), timeout=0.1)
+                    data = await asyncio.wait_for(transcription_queue.get(), timeout=0.5)
 
                     if data.get("status") == "silence_timeout":
                         await websocket.send_json({
@@ -194,7 +187,16 @@ async def websocket_transcribe(websocket: WebSocket):
 
                     await websocket.send_json(data)
 
-                except asyncio.TimeoutError: # Handles the case when there is no new transcription in the queue for 100ms, which is normal and should not be treated as an error by .wait_for()
+                except asyncio.TimeoutError: # No transcription received in the last 0.5s, we check if it has been too long since the last transcription to consider it a silence and stop the stream
+                    elapsed = asyncio.get_event_loop().time() - last_transcription_time
+                    print(f"[Silence] {elapsed:.1f}s / {SILENCE_TIMEOUT_SECONDS}s")
+                    if elapsed >= SILENCE_TIMEOUT_SECONDS:
+                        print(f"[Silence] Timeout reached, end of stream")
+                        await websocket.send_json({
+                            "status": "timeout",
+                            "message": "Stream stopped due to silence"
+                        })
+                        break
                     continue
                 except Exception as e:
                     print(f"Error while sending transcription to the client: {e}")
