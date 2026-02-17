@@ -16,6 +16,16 @@
 
         <main>
             <section class="input-section">
+                <div class="mode-selector">
+                    <label>
+                        <input type="radio" name="stt-mode" value="micro" checked>
+                        Micro (dictée courte, 10s timeout)
+                    </label>
+                    <label>
+                        <input type="radio" name="stt-mode" value="speech">
+                        Speech (discours long, 20s timeout)
+                    </label>
+                </div>
                 <button id="mic-button" class="mic-button">
                     <span class="mic-icon">🎤</span>
                     <span class="mic-text">Appuyer pour parler</span>
@@ -42,10 +52,10 @@
 
         <footer>
             <p>Interface de test locale - AssemblyAI</p>
-            <p class="version">v1.1</p>
+            <p class="version">v1.5</p>
         </footer>
     </div>
 
-    <script src="/static/app_poc.js"></script>
+    <script src="/static/app_poc.js?v=1.5"></script>
 </body>
 </html>

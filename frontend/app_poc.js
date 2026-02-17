@@ -102,9 +102,11 @@ async function startRecording() {
         // AudioWorklet serait la solution moderne mais plus complexe
         audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
 
-        // Connexion WebSocket
+        // Connexion WebSocket avec le mode sélectionné
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        socket = new WebSocket(`${wsProtocol}//${window.location.host}/ws/transcribe`);
+        const selectedMode = document.querySelector('input[name="stt-mode"]:checked').value;
+        debugLog(`Mode STT: ${selectedMode}`);
+        socket = new WebSocket(`${wsProtocol}//${window.location.host}/ws/transcribe?mode=${selectedMode}`);
 
         socket.onopen = () => {
             debugLog('WebSocket connecté');
@@ -169,6 +171,10 @@ async function startRecording() {
                 debugLog(data.message);
                 updateStatus(data.message || 'Arrêt pour inactivité', 'error');
                 stopRecording(false);
+                // Remettre "Prêt" après 3 secondes
+                setTimeout(() => {
+                    updateStatus('Prêt', '');
+                }, 3000);
                 return;
             }
 
@@ -180,7 +186,7 @@ async function startRecording() {
                 return;
             }
 
-            // Transcription
+            // Transcription (mode micro)
             if (data.transcript) {
                 if (data.is_final) {
                     finalTranscript += data.transcript + ' ';
@@ -190,11 +196,12 @@ async function startRecording() {
                     interimTranscript = data.transcript;
                 }
                 updateTranscriptionDisplay();
+            }
 
-                // Warning si confiance faible --> En production, le notifier à l'utilisateur
-                if (data.transcription_confidence && data.transcription_confidence < 0.7 && data.is_final) {
-                    debugLog(`Low transcription confidence: ${data.transcription_confidence.toFixed(2)} --> Please make sure the signal can be heard well by the device.`);
-                }
+            // Warning si la confidence est faible (< 80%)
+            if (data.transcription_confidence !== undefined && data.is_final && data.transcription_confidence < 0.8) {
+                const confidence = (data.transcription_confidence * 100).toFixed(0);
+                debugLog(`[Warning] Confidence faible: ${confidence}%`);
             }
         };
 

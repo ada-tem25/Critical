@@ -2,7 +2,7 @@ import os
 import asyncio
 import json
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -24,7 +24,8 @@ SAMPLE_RATE = 16000
 SPEECH_MODEL = "universal-streaming-multilingual"
 
 # Time in seconds without any transcription before considering it a silence and stopping the stream
-SILENCE_TIMEOUT_SECONDS = 10
+SILENCE_TIMEOUT_MICRO = 10
+SILENCE_TIMEOUT_SPEECH = 20
 
 # AssemblyAI WebSocket URL
 ASSEMBLYAI_WS_URL = "wss://streaming.assemblyai.com/v3/ws"
@@ -51,15 +52,34 @@ async def root():
 
 
 @app.websocket("/ws/transcribe")
-async def websocket_transcribe(websocket: WebSocket):
+async def websocket_transcribe(websocket: WebSocket, mode: str = Query(default="micro")):
+    """
+    WebSocket endpoint for speech-to-text transcription.
+
+    Modes:
+    - "micro": Short audio from microphone. Transcriptions are sent to the client in real-time.
+    - "speech": Longer audio recording. Transcriptions are stored and logged at the end of the stream.
+    """
     await websocket.accept() # the backend must begin by accepting the connexion
+
+    # Check that the mode is valid
+    if mode not in ["micro", "speech"]:
+        await websocket.send_json({"error": f"Mode invalide: {mode}. Utilisez 'micro' ou 'speech'."})
+        await websocket.close()
+        return
+
+    # Mode-related configurations
+    silence_timeout = SILENCE_TIMEOUT_MICRO if mode == "micro" else SILENCE_TIMEOUT_SPEECH
+    send_to_client = (mode == "micro")  # Transcriptions are sent to the client only in "micro" mode
+    print(f"[STT] Mode: {mode} | Timeout silence: {silence_timeout}s | Envoi au client: {send_to_client}")
 
     assemblyai_ws = None
     should_stop = asyncio.Event()
-    last_transcription_time = asyncio.get_event_loop().time()  # Timestamp de la dernière transcription reçue
+    last_transcription_time = asyncio.get_event_loop().time()
     last_final_transcript = ""
+    final_transcripts = []
 
-    # Transcriptions received from AssemblyAI will be put in this queue before being sent to the frontend, to avoid concurrency issues between the tasks that receive from AssemblyAI and send to the client. The "send_transcriptions_to_client" task will read from this queue and send the transcriptions to the frontend in order.
+    # Transcriptions received from AssemblyAI will be put in this queue before being sent to the frontend, to avoid concurrency issues between the tasks that receive from AssemblyAI and send to the client. The "send_transcriptions_to_client" task will read from this queue and send the transcriptions to the frontend in order. In "speech" mode, the messages in this queueu will only contain (session_started, stream_complete, timeout)
     transcription_queue = asyncio.Queue()
 
     try:
@@ -77,14 +97,14 @@ async def websocket_transcribe(websocket: WebSocket):
             print(f"Erreur connexion AssemblyAI: {type(e).__name__}: {e}")
             await websocket.send_json({"error": f"Erreur connexion: {str(e)}"})
             return
-        
+
 
         # 1st concurrent task of the websocket: receives the audio from the client and sends it to AssemblyAI in real-time
         async def receive_speech_from_client():
             while not should_stop.is_set():
                 try:
                     message = await websocket.receive()
-                    
+
                     if message["type"] == "websocket.receive": # normal message, no error
                         if "bytes" in message and message["bytes"]: # the PCM16 audio of the message is in the "bytes" field
                             await assemblyai_ws.send(message["bytes"]) # it is sent directly to AssemblyAI without any processing, as AssemblyAI accepts raw PCM16 audio at 16kHz
@@ -97,13 +117,14 @@ async def websocket_transcribe(websocket: WebSocket):
                     elif message["type"] == "websocket.disconnect":
                         break
 
-                except WebSocketDisconnect: # to handle the case when the client disconnects abruptly (for example by closing the browser tab), which would not trigger "await websocket.receive()". 
+                except WebSocketDisconnect: # to handle the case when the client disconnects abruptly (for example by closing the browser tab), which would not trigger "await websocket.receive()".
                     print("Websocket disconnected from client")
                     break
                 except Exception as e:
                     print(f"Client disconnected: {e}")
                     break
-        
+
+
         # 2nd concurrent task of the websocket: receives the transcriptions from AssemblyAI and puts them in the transcription_queue
         async def receive_transcriptions_from_assemblyai():
             nonlocal last_transcription_time, last_final_transcript # "nonlocal" is necessary to reassign variables that are defined in a parent function
@@ -132,28 +153,42 @@ async def websocket_transcribe(websocket: WebSocket):
                             detected_language = data.get("language_code") # Language retreival
 
                         if transcript and transcript.strip(): #Non-empty transcription
-                            last_transcription_time = asyncio.get_event_loop().time()  # Reset du timer
+                            last_transcription_time = asyncio.get_event_loop().time()
 
                             if is_final and transcript == last_final_transcript: continue # Skip if the final transcript is the same as the last one (sometimes AssemblyAI can resend the same final transcript multiple times, which can cause duplicates in the frontend)
 
-                            print(f"[AssemblyAI] {'FINAL' if is_final else 'interim'}: \"{transcript}\"")
+                            if is_final:
+                                last_final_transcript = transcript
+                                final_transcripts.append({ # For the "speech" mode, we store the final transcriptions in a list
+                                    "transcript": transcript,
+                                    "language": detected_language
+                                })
 
-                            if is_final: last_final_transcript = transcript
-
-                            confidence = 1.0 # We compute the confidence of the transcription
+                            # We always compute the confidence score
+                            confidence = 1.0
                             if words:
                                 confidences = [w.get("confidence", 1.0) for w in words]
                                 confidence = sum(confidences) / len(confidences) if confidences else 1.0
 
-                            await transcription_queue.put({
-                                "transcript": transcript,
-                                "transcription_confidence": confidence,
-                                "is_final": is_final,
-                                "language": detected_language
-                            })
+                            if send_to_client:
+                                # In "micro" mode, we send everything to the client
+                                await transcription_queue.put({
+                                    "transcript": transcript,
+                                    "transcription_confidence": confidence,
+                                    "is_final": is_final,
+                                    "language": detected_language
+                                })
+                            else:
+                                # In "speech" mode, we only send the confidence and the finality status to the client
+                                await transcription_queue.put({
+                                    "transcription_confidence": confidence,
+                                    "is_final": is_final
+                                })
 
                     elif msg_type == "Termination": # When AssemblyAI signals the end of the stream
                         await transcription_queue.put({"status": "stream_complete"})
+                        if not send_to_client:
+                            print("[STT] Stream terminé par AssemblyAI")
                         break
 
                     elif msg_type == "Error": # When AssemblyAI signals an error (for example if the audio format is wrong, or if the session duration exceeds the limit, etc.)
@@ -167,7 +202,8 @@ async def websocket_transcribe(websocket: WebSocket):
                 print(f"AssemblyAI unknown error: {e}")
                 await transcription_queue.put({"error": str(e)})
 
-        # 3rd concurrent task of the websocket: sends the transcriptions received from the transcription_queue to the frontend in real-time.
+
+        # 3rd concurrent task of the websocket: sends the messages from the transcription_queue to the frontend in real-time. In "micro" mode, these messages contain the transcriptions. In "speech" mode, these messages only contain the confidence scores and the finality status, but not the transcriptions themselves 
         async def send_transcriptions_to_client():
             while not should_stop.is_set():
                 try:
@@ -187,24 +223,23 @@ async def websocket_transcribe(websocket: WebSocket):
 
                     await websocket.send_json(data)
 
-                except asyncio.TimeoutError: # No transcription received in the last 0.5s, we check if it has been too long since the last transcription to consider it a silence and stop the stream
-                    elapsed = asyncio.get_event_loop().time() - last_transcription_time
-                    print(f"[Silence] {elapsed:.1f}s / {SILENCE_TIMEOUT_SECONDS}s")
-                    if elapsed >= SILENCE_TIMEOUT_SECONDS:
-                        print(f"[Silence] Timeout reached, end of stream")
-                        await websocket.send_json({
-                            "status": "timeout",
-                            "message": "Stream stopped due to silence"
-                        })
-                        break
-                    continue
+                except asyncio.TimeoutError:
+                    pass  # Normal quand la queue est vide
                 except Exception as e:
-                    print(f"Error while sending transcription to the client: {e}")
+                    print(f"Error in send_transcriptions_to_client: {e}")
                     break
 
-        
+                # Vérification du timeout de silence (dans les deux modes)
+                elapsed = asyncio.get_event_loop().time() - last_transcription_time
+                if elapsed >= silence_timeout:
+                    print(f"[Silence] Timeout reached, end of stream")
+                    await websocket.send_json({
+                        "status": "timeout",
+                        "message": "Stream stopped due to silence"
+                    })
+                    break
 
-        # The 3 tasks that run concurrently within this websocket: receiving audio from client, receiving the transcriptions from AssemblyAI, and sending those transcriptions back to client (this 3rd part will be removed in production, as the user doesn't want to see its transcription in real-time)
+        # The 3 tasks that run concurrently within this websocket: receiving audio from client, receiving the transcriptions from AssemblyAI, and sending those transcriptions back to client (this 3rd part is only active in mode micro)
         receive_task = asyncio.create_task(receive_speech_from_client())
         assemblyai_task = asyncio.create_task(receive_transcriptions_from_assemblyai())
         send_task = asyncio.create_task(send_transcriptions_to_client())
@@ -235,6 +270,11 @@ async def websocket_transcribe(websocket: WebSocket):
                 await assemblyai_ws.close()
             except:
                 pass
+
+        if final_transcripts: # For speech mode
+            full_text = " ".join([t["transcript"] for t in final_transcripts])
+            print(f"[STT] Full final transcript ({len(final_transcripts)} segments): \"{full_text}\"")
+
         print("Websocket closed")
 
 
