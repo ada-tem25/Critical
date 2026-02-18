@@ -16,6 +16,21 @@
 
         <main>
             <section class="input-section">
+                <!-- Instagram URL transcription -->
+                <div class="instagram-section">
+                    <h3>Transcrire depuis Instagram</h3>
+                    <div class="instagram-input-row">
+                        <input type="text" id="instagram-url" placeholder="https://www.instagram.com/reel/..." class="instagram-input">
+                        <button id="instagram-button" class="instagram-button">Transcrire</button>
+                    </div>
+                    <div id="instagram-status" class="status" style="display: none;"></div>
+                    <div id="instagram-result" class="instagram-result" style="display: none;"></div>
+                </div>
+
+                <hr style="margin: 20px 0; border-color: #333;">
+
+                <!-- Microphone transcription -->
+                <h3>Transcrire depuis le micro</h3>
                 <div class="mode-selector">
                     <label>
                         <input type="radio" name="stt-mode" value="micro" checked>
@@ -52,10 +67,78 @@
 
         <footer>
             <p>Interface de test locale - AssemblyAI</p>
-            <p class="version">v1.5</p>
+            <p class="version">v1.8</p>
         </footer>
     </div>
 
-    <script src="/static/app_poc.js?v=1.5"></script>
+    <script src="/static/app_poc.js?v=1.8"></script>
+    <script>
+        // FR: Gestion de la transcription Instagram
+        const instagramButton = document.getElementById('instagram-button');
+        const instagramUrl = document.getElementById('instagram-url');
+        const instagramStatus = document.getElementById('instagram-status');
+        const instagramResult = document.getElementById('instagram-result');
+
+        instagramButton.addEventListener('click', async () => {
+            const url = instagramUrl.value.trim();
+            if (!url) {
+                alert('Veuillez entrer une URL Instagram');
+                return;
+            }
+
+            // FR: Afficher le statut de chargement
+            instagramButton.disabled = true;
+            instagramButton.textContent = 'En cours...';
+            instagramStatus.style.display = 'block';
+            instagramStatus.textContent = 'Téléchargement et transcription en cours...';
+            instagramStatus.className = 'status loading';
+            instagramResult.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/transcribe/instagram', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'completed') {
+                    // FR: Formater la date (YYYYMMDD -> DD/MM/YYYY)
+                    let dateStr = data.upload_date;
+                    if (dateStr && dateStr.length === 8) {
+                        dateStr = `${dateStr.slice(6,8)}/${dateStr.slice(4,6)}/${dateStr.slice(0,4)}`;
+                    }
+
+                    // FR: Avertissement si confiance faible
+                    const confidence = Math.round(data.confidence * 100);
+                    const confidenceWarning = confidence < 80 ? ` ⚠️ Confiance faible (${confidence}%)` : '';
+
+                    instagramStatus.className = 'status success';
+                    instagramResult.style.display = 'block';
+                    instagramResult.innerHTML = `
+                        <div class="debug-info">✓ Transcription réussie en ${data.processing_time_seconds}s</div>
+                        <div class="debug-info">Source: @${data.uploader || '?'} • ${dateStr || '?'}${confidenceWarning}</div>
+                        <div style="margin-top: 8px; color: var(--text-light);">(Transcription affichée dans le terminal backend)</div>
+                    `;
+                    instagramStatus.style.display = 'none';
+                } else {
+                    instagramStatus.textContent = `Erreur: ${data.message}`;
+                    instagramStatus.className = 'status error';
+                }
+            } catch (error) {
+                instagramStatus.textContent = `Erreur: ${error.message}`;
+                instagramStatus.className = 'status error';
+            } finally {
+                instagramButton.disabled = false;
+                instagramButton.textContent = 'Transcrire';
+            }
+        });
+
+        // FR: Permettre de lancer avec Enter
+        instagramUrl.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') instagramButton.click();
+        });
+    </script>
 </body>
 </html>

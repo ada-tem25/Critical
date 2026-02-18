@@ -1,12 +1,19 @@
 import os
 import asyncio
 import json
+import tempfile
+import time
+import re
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, field_validator
+from typing import Optional
 import websockets
+import httpx
+import yt_dlp
 
 app = FastAPI()
 
@@ -23,12 +30,19 @@ SAMPLE_RATE = 16000
 # AssemblyAI audio streaming model (this one detects the language automatically, no need to specify it in the frontend)
 SPEECH_MODEL = "universal-streaming-multilingual"
 
+# AssemblyAI transcription model for pre-recorded audio (for the Instagram transcription endpoint, which is separate from the streaming WebSocket). 
+TRANSCRIPTION_MODEL = "universal-2"
+
 # Time in seconds without any transcription before considering it a silence and stopping the stream
 SILENCE_TIMEOUT_MICRO = 10
 SILENCE_TIMEOUT_SPEECH = 20
 
 # AssemblyAI WebSocket URL
 ASSEMBLYAI_WS_URL = "wss://streaming.assemblyai.com/v3/ws"
+
+# AssemblyAI REST API (for file transcription)
+ASSEMBLYAI_REST_BASE_URL = "https://api.assemblyai.com/v2"
+TRANSCRIPTION_TIMEOUT_SECONDS = 120  # FR: Timeout max pour la transcription d'un fichier
 # ====================================
 
 
@@ -276,6 +290,240 @@ async def websocket_transcribe(websocket: WebSocket, mode: str = Query(default="
             print(f"[STT] Full final transcript ({len(final_transcripts)} segments): \"{full_text}\"")
 
         print("Websocket closed")
+
+
+
+# ============== PYDANTIC MODELS (Instagram transcription) ==============
+class InstagramTranscriptionRequest(BaseModel):
+    """EN: Request model for Instagram transcription, sent by the frontend"""
+    url: str
+
+    @field_validator('url')
+    @classmethod
+    def validate_instagram_url(cls, v): #Checks that the URL is a valid Instagram post or reel URL
+        instagram_pattern = r'^https?://(www\.)?instagram\.com/(p|reel|reels)/[\w-]+/?'
+        if not re.match(instagram_pattern, v):
+            raise ValueError('URL must be a valid Instagram post or reel URL')
+        return v
+
+
+class InstagramTranscriptionResponse(BaseModel):
+    """EN: Response model for Instagram transcription, sent back to the frontend"""
+    status: str  # "completed" ou "error"
+    transcript: Optional[str] = None
+    confidence: Optional[float] = None
+    duration_seconds: Optional[float] = None
+    processing_time_seconds: Optional[float] = None
+    
+    # Post metadata
+    description: Optional[str] = None
+    uploader: Optional[str] = None 
+    upload_date: Optional[str] = None 
+    error_code: Optional[str] = None
+    message: Optional[str] = None
+
+
+# ============== INSTAGRAM TRANSCRIPTION HELPERS ==============
+
+async def download_instagram_audio(url: str, output_dir: str) -> dict:
+    """
+    Downloads the audio from an Instagram URL using yt-dlp.
+    Returns a dict with the metadata and the path to the stored audio.
+    """
+    output_template = os.path.join(output_dir, "audio.%(ext)s")
+
+    ydl_opts = { # yt-dlp parameters
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'outtmpl': output_template,
+        'quiet': True,
+        'no_warnings': True,
+    }
+
+    # yt-dlp is synchronous, so we run it in a thread (run_in_executor) to avoid blocking FastAPI's event loop
+    def _download():
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl: # udio downloaded and metadata retrieval done here. Audio is immediately stored in the output_dir with the name "audio.mp3" thanks to the "outtmpl" parameter, and metadata is stored in the "info" variable
+            info = ydl.extract_info(url, download=True)
+            return {
+                'duration': info.get('duration', 0),
+                'description': info.get('description'), 
+                'uploader': info.get('uploader') or info.get('channel'), 
+                'upload_date': info.get('upload_date'), 
+            }
+
+    loop = asyncio.get_event_loop() # This points to the main event loop of FastAPI
+    metadata = await loop.run_in_executor(None, _download) # This runs the blocking _download function in a separate thread, so that it doesn't block the main event loop
+
+    audio_path = os.path.join(output_dir, "audio.mp3")
+    if not os.path.exists(audio_path): raise FileNotFoundError("Error while creating the audio file temporary path")
+
+    metadata['audio_path'] = audio_path
+    return metadata
+
+
+async def upload_to_assemblyai(file_path: str) -> str:
+    """EN: Uploads an audio file to AssemblyAI and returns the upload_url pointing to the file on AssemblyAI's API."""
+
+    async with httpx.AsyncClient() as client:
+        with open(file_path, "rb") as f: # opens the audio file in binary mode, reads its content and sends it to AssemblyAI's API. The response contains the "upload_url" that we will use to create the transcription job.
+            response = await client.post(
+                f"{ASSEMBLYAI_REST_BASE_URL}/upload",
+                headers={"Authorization": assemblyai_api_key},
+                content=f.read(),
+                timeout=60.0
+            )
+
+        if response.status_code != 200: raise Exception(f"Upload failed with status {response.status_code}")
+        return response.json()["upload_url"]
+
+
+async def create_transcription_job(audio_url: str) -> str:
+    """Calls AssemblyAI's API to create the transcription job, and returns the job's ID."""
+    headers = {
+        "Authorization": assemblyai_api_key,
+        "Content-Type": "application/json",
+    }
+
+    data = {
+        "audio_url": audio_url,
+        "speech_models": [TRANSCRIPTION_MODEL]
+    }
+
+    async with httpx.AsyncClient() as client: # Effectively creates the transcription job by sending a POST request to AssemblyAI's API with the audio_url and the specified parameters. The response contains the "id" of the created transcript, which we will use to poll for the result later.
+        response = await client.post(
+            f"{ASSEMBLYAI_REST_BASE_URL}/transcript",
+            headers=headers,
+            json=data,
+            timeout=30.0
+        )
+
+        if response.status_code != 200:
+            error_detail = response.text
+            print(f"[AssemblyAI] Erreur API: {response.status_code} - {error_detail}")
+            raise Exception(f"Création du job échouée: {response.status_code} - {error_detail}")
+
+        return response.json()["id"]
+
+
+async def poll_transcription_result(transcript_id: str, timeout: float) -> dict:
+    """EN: Polls AssemblyAI until the transcription is completed or timeout."""
+    polling_interval_seconds = 3
+    start_time = time.time()
+    async with httpx.AsyncClient() as client: # We keep sending GET requests to AssemblyAI's API every few seconds to check the status of the transcription job, until it is completed or an error occurs.
+        while True:
+            if time.time() - start_time > timeout: raise TimeoutError("Transcription timeout")
+
+            response = await client.get(
+                f"{ASSEMBLYAI_REST_BASE_URL}/transcript/{transcript_id}",
+                headers={"Authorization": assemblyai_api_key},
+                timeout=30.0
+            )
+
+            result = response.json()
+            status = result.get("status")
+
+            if status == "completed": return result
+            elif status == "error": raise Exception(f"Erreur transcription: {result.get('error')}")
+
+            # EN: If status is "queued" or "processing", we wait a little before re-polling
+            await asyncio.sleep(polling_interval_seconds)
+
+
+# ============== INSTAGRAM TRANSCRIPTION ENDPOINT ==============
+
+@app.post("/api/transcribe/instagram", response_model=InstagramTranscriptionResponse)
+async def transcribe_instagram(request: InstagramTranscriptionRequest):
+    """
+    Endpoint to transcribe the audio from an Instagram post, and fetch its metadata. 
+
+    Workflow:
+    1. Downloads the audio with yt-dlp
+    2. Uploads it to AssemblyAI
+    3. Creates a transcription job
+    4. Poll until completion of the transcription
+    5. Returns the result
+    """
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir: # This structure ensures that the temporary directory is automatically deleted at the end of the block, even if an error occurs. 
+
+            # 1. Download the audio with yt-dlp, and retrieve the metadata of the post (duration, description, uploader name, upload date). The audio is stored in a temporary directory, and its path is returned in the "metadata" dict.
+            try:
+                metadata = await download_instagram_audio(request.url, temp_dir)
+                audio_path = metadata['audio_path']
+                duration = metadata['duration']
+                print(f"[Instagram] Audio téléchargé: {audio_path} ({duration}s)")
+                print(f"[Instagram] Compte: {metadata.get('uploader')} | Date: {metadata.get('upload_date')}")
+            except Exception as e:
+                print(f"[Instagram] Erreur téléchargement: {e}")
+                return InstagramTranscriptionResponse(
+                    status="error",
+                    error_code="DOWNLOAD_FAILED",
+                    message=f"Impossible de télécharger l'audio: {str(e)}"
+                )
+
+            # 2. Upload the audio to AssemblyAI and get the upload_url where the file will be transcribed on AssemblyAI's API.
+            try:
+                upload_url = await upload_to_assemblyai(audio_path)
+            except Exception as e:
+                print(f"[Instagram] Erreur upload: {e}")
+                return InstagramTranscriptionResponse(
+                    status="error",
+                    error_code="UPLOAD_FAILED",
+                    message=f"Échec de l'upload: {str(e)}"
+                )
+
+            # 3. Create the transcription job on AssemblyAI with the upload_url, and get the transcript_id to poll the result later.
+            try:
+                transcript_id = await create_transcription_job(upload_url)
+            except Exception as e:
+                print(f"[Instagram] Erreur création job: {e}")
+                return InstagramTranscriptionResponse(
+                    status="error",
+                    error_code="TRANSCRIPTION_FAILED",
+                    message=f"Échec de création du job: {str(e)}"
+                )
+
+            # 4. Poll until completion of the transcription, and get the result (transcript text, confidence score, etc.)
+            try:
+                result = await poll_transcription_result(transcript_id, TRANSCRIPTION_TIMEOUT_SECONDS)
+                print("[Instagram] Transcription:", result.get("text"))
+                print(f"[Instagram] Confiance: {result.get('confidence')}")
+            except TimeoutError:
+                return InstagramTranscriptionResponse(
+                    status="error",
+                    error_code="TIMEOUT",
+                    message="Transcription took too long and was stopped"
+                )
+            except Exception as e:
+                print(f"[Instagram] Erreur transcription: {e}")
+                return InstagramTranscriptionResponse(
+                    status="error",
+                    error_code="TRANSCRIPTION_FAILED",
+                    message=f"Transcription error: {str(e)}"
+                )
+
+        return InstagramTranscriptionResponse(
+            status="completed",
+            transcript=result.get("text"),
+            confidence=result.get("confidence"),
+            duration_seconds=duration,
+            description=metadata.get('description'),
+            uploader=metadata.get('uploader'),
+            upload_date=metadata.get('upload_date')
+        )
+
+    except Exception as e:
+        print(f"[Instagram] Erreur inattendue: {e}")
+        return InstagramTranscriptionResponse(
+            status="error",
+            error_code="INTERNAL_ERROR",
+            message=f"Erreur interne: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
