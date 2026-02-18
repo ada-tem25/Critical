@@ -117,7 +117,6 @@
                     instagramStatus.className = 'status success';
                     instagramResult.style.display = 'block';
                     instagramResult.innerHTML = `
-                        <div class="debug-info">✓ Transcription réussie en ${data.processing_time_seconds}s</div>
                         <div class="debug-info">Source: @${data.uploader || '?'} • ${dateStr || '?'}${confidenceWarning}</div>
                         <div style="margin-top: 8px; color: var(--text-light);">(Transcription affichée dans le terminal backend)</div>
                     `;
