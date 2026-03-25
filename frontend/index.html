@@ -29,6 +29,16 @@
 
                 <hr style="margin: 20px 0; border-color: #333;">
 
+                <!-- Pure text input -->
+                <div class="text-section">
+                    <h3>Entrer du texte directement</h3>
+                    <textarea id="text-input" class="text-input" rows="4" placeholder="Collez ou tapez votre texte ici..."></textarea>
+                    <button id="text-button" class="instagram-button" style="margin-top: 0.5rem;">Envoyer</button>
+                    <div id="text-status" class="status" style="display: none;"></div>
+                </div>
+
+                <hr style="margin: 20px 0; border-color: #333;">
+
                 <!-- Microphone transcription -->
                 <h3>Transcrire depuis le micro</h3>
                 <div class="mode-selector">
@@ -137,6 +147,58 @@
         // FR: Permettre de lancer avec Enter
         instagramUrl.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') instagramButton.click();
+        });
+
+        // FR: Gestion de l'envoi de texte pur
+        const textButton = document.getElementById('text-button');
+        const textInput = document.getElementById('text-input');
+        const textStatus = document.getElementById('text-status');
+
+        textButton.addEventListener('click', async () => {
+            const text = textInput.value.trim();
+            if (!text) {
+                alert('Veuillez entrer du texte');
+                return;
+            }
+
+            textButton.disabled = true;
+            textButton.textContent = 'Envoi...';
+            textStatus.style.display = 'block';
+            textStatus.textContent = 'Envoi du texte...';
+            textStatus.className = 'status loading';
+
+            try {
+                const response = await fetch('/api/text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'ok') {
+                    textStatus.textContent = data.message;
+                    textStatus.className = 'status success';
+
+                    // FR: Afficher le texte dans la zone de transcription
+                    const transcriptionEl = document.getElementById('transcription');
+                    transcriptionEl.innerHTML = `<span class="final">${data.text}</span>`;
+                } else {
+                    textStatus.textContent = `Erreur: ${data.message}`;
+                    textStatus.className = 'status error';
+                }
+            } catch (error) {
+                textStatus.textContent = `Erreur: ${error.message}`;
+                textStatus.className = 'status error';
+            } finally {
+                textButton.disabled = false;
+                textButton.textContent = 'Envoyer';
+            }
+        });
+
+        // FR: Permettre d'envoyer avec Ctrl+Enter
+        textInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) textButton.click();
         });
     </script>
 </body>

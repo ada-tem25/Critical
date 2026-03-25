@@ -16,6 +16,7 @@ from STT import (
     create_transcription_job,
     poll_transcription_result,
 )
+from normalizer import normalize
 
 router = APIRouter()
 
@@ -170,9 +171,19 @@ async def transcribe_instagram(request: InstagramTranscriptionRequest):
                     message=f"Transcription error: {str(e)}"
                 )
 
+        transcript_text = result.get("text", "")
+        if transcript_text:
+            normalize(
+                text=transcript_text,
+                source_type="instagram",
+                source_url=request.url,
+                author=metadata.get('uploader', ''),
+                date_str=metadata.get('upload_date', ''),
+            )
+
         return InstagramTranscriptionResponse(
             status="completed",
-            transcript=result.get("text"),
+            transcript=transcript_text,
             confidence=result.get("confidence"),
             description=metadata.get('description'),
             uploader=metadata.get('uploader'),

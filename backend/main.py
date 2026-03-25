@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 
 from STT import router as stt_router
 from instagram import router as instagram_router
+from text_input import router as text_input_router
 
 app = FastAPI()
 
@@ -35,6 +36,7 @@ async def root():
 # Include routers from all backend modules
 app.include_router(stt_router)
 app.include_router(instagram_router)
+app.include_router(text_input_router)
 
 
 if __name__ == "__main__":
