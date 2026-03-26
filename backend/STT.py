@@ -7,6 +7,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 import websockets
 import httpx
 from normalizer import normalize
+from main_pipeline import run_pipeline
 
 router = APIRouter()
 
@@ -261,7 +262,8 @@ async def websocket_transcribe(websocket: WebSocket, mode: str = Query(default="
         if final_transcripts: # For speech mode
             full_text = " ".join([t["transcript"] for t in final_transcripts])
             print(f"[STT] Full final transcript ({len(final_transcripts)} segments): \"{full_text}\"")
-            normalize(text=full_text, source_type="recording")
+            normalized = normalize(text=full_text, source_type="recording")
+            await run_pipeline(normalized)
 
         print("Websocket closed")
 

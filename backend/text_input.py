@@ -5,6 +5,7 @@ Receives raw text from the frontend for processing.
 from fastapi import APIRouter
 from pydantic import BaseModel
 from normalizer import normalize
+from main_pipeline import run_pipeline
 
 router = APIRouter()
 
@@ -30,7 +31,8 @@ async def receive_text(request: TextInputRequest):
             message="Le texte est vide."
         )
 
-    normalize(text=text, source_type="text")
+    normalized = normalize(text=text, source_type="text")
+    await run_pipeline(normalized)
 
     return TextInputResponse(
         status="ok",

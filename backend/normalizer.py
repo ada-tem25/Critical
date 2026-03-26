@@ -46,12 +46,6 @@ def normalize(
         date=formatted_date,
     )
 
-    print(f"\n{'='*50}")
-    print(f"[NORMALIZER] Source: {result.source_type}")
-    print(f"[NORMALIZER] Author: {result.author or '(none)'}")
-    print(f"[NORMALIZER] Date: {result.date}")
-    print(f"[NORMALIZER] URL: {result.source_url or '(none)'}")
-    print(f"[NORMALIZER] Text: {result.text}")
-    print(f"{'='*50}\n")
+    print(f"[NORMALIZER] {result}")
 
     return result
