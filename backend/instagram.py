@@ -5,6 +5,7 @@ import os
 import asyncio
 import tempfile
 import re
+import time
 from typing import Optional
 from pydantic import BaseModel, field_validator
 from fastapi import APIRouter
@@ -113,6 +114,8 @@ async def transcribe_instagram(request: InstagramTranscriptionRequest):
     """
     
     try:
+        preprocessing_t0 = time.perf_counter()
+
         with tempfile.TemporaryDirectory() as temp_dir: # This structure ensures that the temporary directory is automatically deleted at the end of the block, even if an error occurs.
 
             # 1. Download the audio with yt-dlp, and retrieve the metadata of the post (duration, description, uploader name, upload date). The audio is stored in a temporary directory, and its path is returned in the "metadata" dict.
@@ -174,6 +177,7 @@ async def transcribe_instagram(request: InstagramTranscriptionRequest):
 
         transcript_text = result.get("text", "")
         if transcript_text:
+            preprocessing_duration = time.perf_counter() - preprocessing_t0
             normalized = normalize(
                 text=transcript_text,
                 source_type="instagram",
@@ -181,7 +185,7 @@ async def transcribe_instagram(request: InstagramTranscriptionRequest):
                 author=metadata.get('uploader', ''),
                 date_str=metadata.get('upload_date', ''),
             )
-            await run_pipeline(normalized)
+            await run_pipeline(normalized, preprocessing_duration=preprocessing_duration)
 
         return InstagramTranscriptionResponse(
             status="completed",

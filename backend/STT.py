@@ -49,6 +49,7 @@ async def websocket_transcribe(websocket: WebSocket, mode: str = Query(default="
     - "speech": Longer audio recording. Transcriptions are stored and logged at the end of the stream.
     """
     await websocket.accept() # the backend must begin by accepting the connexion
+    preprocessing_t0 = time.perf_counter()
 
     # Check that the mode is valid
     if mode not in ["micro", "speech"]:
@@ -261,9 +262,10 @@ async def websocket_transcribe(websocket: WebSocket, mode: str = Query(default="
 
         if final_transcripts: # For speech mode
             full_text = " ".join([t["transcript"] for t in final_transcripts])
+            preprocessing_duration = time.perf_counter() - preprocessing_t0
             print(f"[STT] Full final transcript ({len(final_transcripts)} segments): \"{full_text}\"")
             normalized = normalize(text=full_text, source_type="recording")
-            await run_pipeline(normalized)
+            await run_pipeline(normalized, preprocessing_duration=preprocessing_duration)
 
         print("Websocket closed")
 
