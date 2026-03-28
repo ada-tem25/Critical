@@ -10,11 +10,12 @@ from pydantic import BaseModel
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from normalizer import NormalizedInput
-from prompts import decomposer_instructions
+from prompts import decomposer_instructions, decomposer_corrector_instructions
 
 load_dotenv()
 
 llm = ChatAnthropic(model="claude-sonnet-4-20250514")
+llm_haiku = ChatAnthropic(model="claude-haiku-4-5-20251001")
 
 
 # ── Models ──────────────────────────────────────────────────
@@ -85,43 +86,86 @@ class ClaimList(BaseModel):
     claims: list[Claim]
 
 
-async def decompose(normalized: NormalizedInput) -> tuple[list[Claim], dict]:
-    """LLM agent. Reads the full text and decomposes it into a DAG of claims.
+async def decompose(normalized: NormalizedInput, correct: bool = False) -> tuple[list[Claim], dict]:
+    """LLM agent. Decomposes text into claims (Sonnet), optionally corrects (Haiku).
     Returns (claims, metrics) where metrics contains timing and token usage."""
 
-    structured_llm = llm.with_structured_output(ClaimList, include_raw=True)
+    import json
+
+    # ── Pass 1: Decomposer (Sonnet) ──
+    structured_sonnet = llm.with_structured_output(ClaimList, include_raw=True)
 
     t0 = time.perf_counter()
-    raw_response = await structured_llm.ainvoke([
+    raw_response = await structured_sonnet.ainvoke([
         SystemMessage(content=decomposer_instructions),
         HumanMessage(content=normalized.text),
     ])
-    duration = time.perf_counter() - t0
+    decomposer_duration = time.perf_counter() - t0
 
     if raw_response["parsed"] is None:
         print(f"[DECOMPOSER] Parsing failed: {raw_response.get('parsing_error')}")
         print(f"[DECOMPOSER] Raw output: {raw_response['raw'].content}")
         raise ValueError(f"Decomposer failed to produce valid output: {raw_response.get('parsing_error')}")
 
-    claims = raw_response["parsed"].claims
-    usage = raw_response["raw"].usage_metadata
-    metrics = {
-        "duration": duration,
-        "input_tokens": usage.get("input_tokens", 0),
-        "output_tokens": usage.get("output_tokens", 0),
-        "total_tokens": usage.get("total_tokens", 0),
-    }
+    initial_claims = raw_response["parsed"].claims
+    usage_1 = raw_response["raw"].usage_metadata
 
     print(f"\n{'='*50}")
-    print(f"[DECOMPOSER] {len(claims)} claims extracted in {duration:.2f}s")
-    print(f"[DECOMPOSER] Tokens: {metrics['input_tokens']} in / {metrics['output_tokens']} out / {metrics['total_tokens']} total")
-    for c in claims:
+    print(f"[DECOMPOSER] {len(initial_claims)} claims extracted in {decomposer_duration:.2f}s")
+    print(f"[DECOMPOSER] Tokens: {usage_1.get('input_tokens', 0)} in / {usage_1.get('output_tokens', 0)} out")
+    for c in initial_claims:
         print(f"  #{c.id} [{c.verifiability}] ({c.type}/{c.role}) {c.idea}")
         if c.supports:
             print(f"       supports: {c.supports}")
     print(f"{'='*50}\n")
 
-    return claims, metrics
+    # ── Pass 2: Corrector (Haiku) — optional ──
+    if correct:
+        claims_json = json.dumps([c.model_dump() for c in initial_claims], ensure_ascii=False, indent=2)
+        corrector_input = f"ORIGINAL TEXT:\n{normalized.text}\n\nCLAIMS:\n{claims_json}"
+
+        structured_haiku = llm_haiku.with_structured_output(ClaimList, include_raw=True)
+
+        t1 = time.perf_counter()
+        corrector_response = await structured_haiku.ainvoke([
+            SystemMessage(content=decomposer_corrector_instructions),
+            HumanMessage(content=corrector_input),
+        ])
+        corrector_duration = time.perf_counter() - t1
+
+        if corrector_response["parsed"] is None:
+            print(f"[CORRECTOR] Parsing failed: {corrector_response.get('parsing_error')}")
+            print(f"[CORRECTOR] Raw output: {corrector_response['raw'].content}")
+            print(f"[CORRECTOR] Falling back to uncorrected claims")
+            final_claims = initial_claims
+            usage_2 = corrector_response["raw"].usage_metadata
+        else:
+            final_claims = corrector_response["parsed"].claims
+            usage_2 = corrector_response["raw"].usage_metadata
+
+            removed = len(initial_claims) - len(final_claims)
+            print(f"{'='*50}")
+            print(f"[CORRECTOR] {len(final_claims)} claims after correction in {corrector_duration:.2f}s ({removed:+d} claims)")
+            print(f"[CORRECTOR] Tokens: {usage_2.get('input_tokens', 0)} in / {usage_2.get('output_tokens', 0)} out")
+            for c in final_claims:
+                print(f"  #{c.id} [{c.verifiability}] ({c.type}/{c.role}) {c.idea}")
+                if c.supports:
+                    print(f"       supports: {c.supports}")
+            print(f"{'='*50}\n")
+    else:
+        final_claims = initial_claims
+        corrector_duration = 0.0
+        usage_2 = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+    # ── Combine metrics ──
+    metrics = {
+        "duration": decomposer_duration + corrector_duration,
+        "input_tokens": usage_1.get("input_tokens", 0) + usage_2.get("input_tokens", 0),
+        "output_tokens": usage_1.get("output_tokens", 0) + usage_2.get("output_tokens", 0),
+        "total_tokens": usage_1.get("total_tokens", 0) + usage_2.get("total_tokens", 0),
+    }
+
+    return final_claims, metrics
 
 
 async def orchestrate(claims: list[Claim]) -> list[AnalyzedClaim]:
@@ -141,9 +185,10 @@ async def write_article(normalized: NormalizedInput, analyzed_claims: list[Analy
 
 # =================== Main entry point ========================================
 
-async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: float = 0.0) -> PipelineResult:
+async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: float = 0.0, correct_decomposition: bool = False) -> PipelineResult:
     """Runs the full main pipeline from a NormalizedInput to final article.
-    preprocessing_duration: time spent before the pipeline (scraping, transcription, etc.)"""
+    preprocessing_duration: time spent before the pipeline (scraping, transcription, etc.)
+    correct_decomposition: if True, runs a second LLM pass to clean up the claim DAG."""
 
     pipeline_t0 = time.perf_counter()
     all_metrics = {}
@@ -152,7 +197,7 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
 
     # 1. Parallel: rhetoric detection || (decompose → orchestrate)
     async def _decompose_and_analyze():
-        claims, decomposer_metrics = await decompose(normalized)
+        claims, decomposer_metrics = await decompose(normalized, correct=correct_decomposition)
         all_metrics["decomposer"] = decomposer_metrics
 
         t0 = time.perf_counter()

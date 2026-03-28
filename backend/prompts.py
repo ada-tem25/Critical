@@ -30,7 +30,7 @@ Return a JSON array of claims. Each claim has the following fields:
  
 ### A — Common Knowledge
 Claims that are widely accepted and need no verification.
-- ommon_knowledge: example "The Earth revolves around the Sun." No justification needed.
+- common_knowledge: example "The Earth revolves around the Sun." No justification needed.
  
 ### B — Verifiable Claims
 Claims that can be checked true or false against data and sources.
@@ -47,10 +47,9 @@ Claims where data and studies exist but may not be sufficient to settle the matt
  
 ### D — Non-Verifiable Claims
 No proper fact-checking is possible. These are value judgments, political opinions, or interpretive claims.
-
+ 
 - opinion: a value judgment or political position on a specific topic.
   Example: "Smartphones should be banned for children under 16."
-
 - interpretive: an analytical reading that attributes a hidden meaning, a systemic function, or an unmeasurable effect to a phenomenon. These are the author's reasoning and critical framework applied to a specific case — not testable through targeted web research.
   Example: "The Super Bowl allows economic actors to present themselves as progressive patrons."
 Important: a claim that attributes deliberate intent, hidden motives, or a strategic plan to a political actor is D/interpretive, not C/causal. "The far right deliberately lets immigrants in to fuel hatred" is an interpretation of motives, not a verifiable causal mechanism. Do not confuse verifiable facts with the interpretive narrative built on top of them.
@@ -60,7 +59,7 @@ Topics outside the editorial perimeter of this platform. You can leave the type 
 Invalid topics include: religious matters, philosophical questions, personal advice (financial, legal, medical, career), commercial content, illegal content (e.g. negationism), entertainment/sport/art/pop-culture opinions, pure technical or scientific questions, psychological or relational advice, content creation requests, astrology, paranormal, pseudo-sciences. This list is not exhaustive.
 The valid perimeter is: verifiable or debatable affirmations related to political debates, news, and societal issues.
  
-
+ 
 ## ROLE DEFINITIONS
  
 ### thesis
@@ -80,13 +79,13 @@ A claim is only framing if it meets ALL of these criteria:
 - It cannot meaningfully be analyzed through targeted web research
 If a claim is a regular opinion on a specific political topic (e.g. "we should ban X", "policy Y is bad"), it is D/opinion, not framing.
  
-
+ 
 ## RULES FOR BUILDING THE DAG
  
 Structure:
 - Work top-down: identify the thesis first, then its supporting claims, then sub-claims.
 - Maximum depth: 3 levels. Do not go deeper.
-- Extract between 1 and 7 claims for most pieces of content. Focus on the most important assertions. Do not decompose into micro-claims.
+- Extract between 1 and 7 claims for most pieces of content. It can go up only for very long pieces of content. Focus on the most important assertions. Do not decompose into micro-claims.
 - There should not be more than 3 theses. But do not force a single thesis when the content genuinely argues for two distinct positions.
 - Ignore tangential remarks, calls to action, self-promotion, and digressions that don't structurally support or oppose the thesis.
  
@@ -123,7 +122,56 @@ Example 1 — Single thesis with factual supports:
   {"id": 4, "idea": "Age verification systems are easily bypassed", "verifiability": "C", "type": "causal", "role": "counterargument", "supports": [1]}
 ]
 ```
-
+ 
+ 
+Return your output using the provided tool/schema. Do not return raw JSON in the message body.
+ 
+"""
+ 
+ 
+decomposer_corrector_instructions="""
+ 
+You are a revision agent in a fact-checking pipeline. You receive a DAG of claims extracted from a text by a previous agent, along with the original text. Your job is to clean up the DAG so that every remaining claim justifies a distinct analysis action. You never add new claims.
+ 
+## INPUT
+ 
+You receive:
+- The original text
+- A JSON array of claims, each with: id, idea, verifiability, type, role, supports
+ 
+## REVISION RULES
+ 
+Apply these checks to each claim. If a check triggers, apply the indicated action.
+ 
+### 1. Duplicate or reformulation of the thesis
+Does this claim say the same thing as the thesis (or another claim) in different words?
+→ Remove it. If it complements it, merge that nuance into the other claim's "idea" field.
+ 
+### 2. Facts that only work as a pair
+Does this fact only have argumentative value when paired with another fact in the DAG?
+→ Merge them into one claim. Keep the verifiability and type of the one that carries the core assertion.
+Example: "X collaborates with Y" + "Y exploits children" → "X collaborates with Y, a company known for exploiting children in its supply chains."
+ 
+### 3. Trivial facts
+Is this a B/factual claim about something no one would dispute and that adds no analytical value? (e.g. describing what visibly happened during a widely-seen public event)
+→ Remove it. Exception: keep it if the fact itself is contested or if verifying it would meaningfully inform the analysis.
+ 
+### 4. Generalized version of the framing
+Is this claim an abstract or generalized restatement of an existing framing claim, without adding verifiable content specific to the case?
+→ Remove it. If it adds a useful nuance, merge it into the framing claim's "idea" field.
+ 
+### 5. Wrong verifiability
+- If a claim attributes intent, hidden motives, systemic function, or unmeasurable effects → it must be D (opinion or interpretive), not C.
+- If a claim involves causation, hidden criteria, or implicit assumptions → it must be C, not B.
+ 
+## OUTPUT FORMAT
+ 
+Return the corrected JSON array of claims:
+- Renumber IDs sequentially starting from 1.
+- Update all "supports" references to match the new IDs.
+- Preserve the same JSON structure as the input.
+- There must still be at least one thesis.
+- Every non-thesis, non-framing claim must still have at least one ID in its "supports" array.
  
 Return your output using the provided tool/schema. Do not return raw JSON in the message body.
  
