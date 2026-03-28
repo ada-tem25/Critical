@@ -36,10 +36,16 @@ class Source(BaseModel):
 class Claim(BaseModel):
     id: int
     idea: str
-    verifiability: str  # A | B | C | D | E
-    type: str
+    verifiability: Optional[str] = None  # A | B | C | D | E
+    type: Optional[str] = None
     role: str           # thesis | supporting | counterargument
     supports: list[int]
+
+
+class RecommendedReading(BaseModel):
+    title: str
+    author: str
+    year: int
 
 
 class AnalyzedClaim(BaseModel):
@@ -47,9 +53,11 @@ class AnalyzedClaim(BaseModel):
     idea: str
     role: str
     summary: str
+    analyzed: bool = False
     supports: list[int]
     sources: list[Source]
     analysis: Optional[str] = None
+    recommended_reading: list[RecommendedReading] = []
 
 
 class PipelineResult(BaseModel):
@@ -89,6 +97,11 @@ async def decompose(normalized: NormalizedInput) -> tuple[list[Claim], dict]:
         HumanMessage(content=normalized.text),
     ])
     duration = time.perf_counter() - t0
+
+    if raw_response["parsed"] is None:
+        print(f"[DECOMPOSER] Parsing failed: {raw_response.get('parsing_error')}")
+        print(f"[DECOMPOSER] Raw output: {raw_response['raw'].content}")
+        raise ValueError(f"Decomposer failed to produce valid output: {raw_response.get('parsing_error')}")
 
     claims = raw_response["parsed"].claims
     usage = raw_response["raw"].usage_metadata
