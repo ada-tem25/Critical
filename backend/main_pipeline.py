@@ -185,10 +185,10 @@ async def write_article(normalized: NormalizedInput, analyzed_claims: list[Analy
 
 # =================== Main entry point ========================================
 
-async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: float = 0.0, correct_decomposition: bool = False) -> PipelineResult:
+async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: float = 0.0, mode: str = "eco") -> PipelineResult:
     """Runs the full main pipeline from a NormalizedInput to final article.
     preprocessing_duration: time spent before the pipeline (scraping, transcription, etc.)
-    correct_decomposition: if True, runs a second LLM pass to clean up the claim DAG."""
+    mode: 'eco' (default) or 'performance' (enables decomposition correction)."""
 
     pipeline_t0 = time.perf_counter()
     all_metrics = {}
@@ -197,7 +197,7 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
 
     # 1. Parallel: rhetoric detection || (decompose → orchestrate)
     async def _decompose_and_analyze():
-        claims, decomposer_metrics = await decompose(normalized, correct=correct_decomposition)
+        claims, decomposer_metrics = await decompose(normalized, correct=(mode == "performance"))
         all_metrics["decomposer"] = decomposer_metrics
 
         t0 = time.perf_counter()

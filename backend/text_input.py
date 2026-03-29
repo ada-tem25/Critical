@@ -12,6 +12,7 @@ router = APIRouter()
 
 class TextInputRequest(BaseModel):
     text: str
+    mode: str = "eco"
 
 
 class TextInputResponse(BaseModel):
@@ -32,7 +33,7 @@ async def receive_text(request: TextInputRequest):
         )
 
     normalized = normalize(text=text, source_type="text")
-    await run_pipeline(normalized)
+    await run_pipeline(normalized, mode=request.mode)
 
     return TextInputResponse(
         status="ok",

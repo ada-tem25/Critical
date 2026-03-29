@@ -68,6 +68,57 @@ section h2 {
     letter-spacing: 0.05em;
 }
 
+/* Mode toggle */
+.mode-toggle {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+
+.mode-toggle-track {
+    display: flex;
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px;
+}
+
+.mode-toggle-track .slider {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: calc(50% - 4px);
+    height: calc(100% - 8px);
+    background: var(--primary);
+    border-radius: 7px;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 0;
+}
+
+.mode-toggle-track.performance .slider {
+    transform: translateX(100%);
+}
+
+.mode-btn {
+    position: relative;
+    z-index: 1;
+    padding: 0.5rem 1.25rem;
+    background: none;
+    color: var(--text-light);
+    border: none;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.3s;
+    min-width: 120px;
+    text-align: center;
+}
+
+.mode-btn.active {
+    color: white;
+}
+
 /* Language selector */
 .language-selector {
     display: flex;

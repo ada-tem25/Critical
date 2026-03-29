@@ -28,6 +28,7 @@ router = APIRouter()
 class InstagramTranscriptionRequest(BaseModel):
     """Request model for Instagram transcription, sent by the frontend"""
     url: str
+    mode: str = "eco"
 
     @field_validator('url')
     @classmethod
@@ -185,7 +186,7 @@ async def transcribe_instagram(request: InstagramTranscriptionRequest):
                 author=metadata.get('uploader', ''),
                 date_str=metadata.get('upload_date', ''),
             )
-            await run_pipeline(normalized, preprocessing_duration=preprocessing_duration)
+            await run_pipeline(normalized, preprocessing_duration=preprocessing_duration, mode=request.mode)
 
         return InstagramTranscriptionResponse(
             status="completed",

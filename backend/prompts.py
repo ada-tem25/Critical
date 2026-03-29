@@ -150,7 +150,7 @@ Does this claim say the same thing as the thesis (or another claim) in different
 ### 2. Facts that only work as a pair
 Does this fact only have argumentative value when paired with another fact in the DAG?
 → Merge them into one claim. Keep the verifiability and type of the one that carries the core assertion.
-Example: "X collaborates with Y" + "Y exploits children" → "X collaborates with Y, a company known for exploiting children in its supply chains."
+Example: "X collaborates with Y" + "Y exploits children" → "X collaborates with Y, a company known for exploiting children."
  
 ### 3. Trivial facts
 Is this a B/factual claim about something no one would dispute and that adds no analytical value? (e.g. describing what visibly happened during a widely-seen public event)
@@ -160,10 +160,19 @@ Is this a B/factual claim about something no one would dispute and that adds no 
 Is this claim an abstract or generalized restatement of an existing framing claim, without adding verifiable content specific to the case?
 → Remove it. If it adds a useful nuance, merge it into the framing claim's "idea" field.
  
-### 5. Wrong verifiability
-- If a claim attributes intent, hidden motives, systemic function, or unmeasurable effects → it must be D (opinion or interpretive), not C.
-- If a claim involves causation, hidden criteria, or implicit assumptions → it must be C, not B.
- 
+### 5. No new information
+When merging two claims, combine only what is already written in those claims.
+Never pull additional context from the original text into a claim.
+
+### 6. Wrong verifiability 
+
+Sometimes, you will need to reclassify previously misclassified claims. The only distinction that really matters is the one between those 4 categories. Here are some simple guidelines on when to potentially reclassify. Only do it when you are certain the Decomposer misclassified a claim. 
+- B (factual | statistical | quote | event): fact-checkable claims: can a web search confirm or deny this claim with data?
+- C (causal | comparative | predictive): the claim involves causation, hidden criteria, or implicit assumptions. Data or studies might exist on the web 
+- D (opinion): value judgment or political position on a specific topic (no fact-checking is possible)
+- D (interpretive): attributes hidden meaning, systemic function, intent, or unmeasurable effects (no fact-checking is possible)
+
+
 ## OUTPUT FORMAT
  
 Return the corrected JSON array of claims:

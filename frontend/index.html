@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Critical - Test AssemblyAI</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=1.9">
 </head>
 <body>
     <div class="container">
@@ -15,6 +15,14 @@
         </header>
 
         <main>
+            <div class="mode-toggle">
+                <div class="mode-toggle-track" id="mode-track">
+                    <div class="slider"></div>
+                    <button id="mode-eco" class="mode-btn active">Économie</button>
+                    <button id="mode-perf" class="mode-btn">Performance</button>
+                </div>
+            </div>
+
             <section class="input-section">
                 <!-- Instagram URL transcription -->
                 <div class="instagram-section">
@@ -77,12 +85,31 @@
 
         <footer>
             <p>Interface de test locale - AssemblyAI</p>
-            <p class="version">v1.8</p>
+            <p class="version">v1.9</p>
         </footer>
     </div>
 
     <script src="/static/app_poc.js?v=1.8"></script>
     <script>
+        // FR: Toggle mode Économie / Performance
+        let currentMode = 'eco';
+        const modeEco = document.getElementById('mode-eco');
+        const modePerf = document.getElementById('mode-perf');
+        const modeTrack = document.getElementById('mode-track');
+
+        modeEco.addEventListener('click', () => {
+            currentMode = 'eco';
+            modeEco.classList.add('active');
+            modePerf.classList.remove('active');
+            modeTrack.classList.remove('performance');
+        });
+        modePerf.addEventListener('click', () => {
+            currentMode = 'performance';
+            modePerf.classList.add('active');
+            modeEco.classList.remove('active');
+            modeTrack.classList.add('performance');
+        });
+
         // FR: Gestion de la transcription Instagram
         const instagramButton = document.getElementById('instagram-button');
         const instagramUrl = document.getElementById('instagram-url');
@@ -108,7 +135,7 @@
                 const response = await fetch('/api/transcribe/instagram', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url })
+                    body: JSON.stringify({ url: url, mode: currentMode })
                 });
 
                 const data = await response.json();
@@ -171,7 +198,7 @@
                 const response = await fetch('/api/text', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: text })
+                    body: JSON.stringify({ text: text, mode: currentMode })
                 });
 
                 const data = await response.json();
