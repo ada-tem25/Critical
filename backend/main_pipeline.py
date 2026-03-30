@@ -35,9 +35,8 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
         return analyzed
 
     async def _detect_rhetorics():
-        t0 = time.perf_counter()
-        result = await detect_rhetorics(normalized)
-        all_metrics["rhetoric_detector"] = {"duration": time.perf_counter() - t0}
+        result, rhetoric_metrics = await detect_rhetorics(normalized)
+        all_metrics["rhetoric_detector"] = rhetoric_metrics
         return result
 
     rhetorics, analyzed_claims = await asyncio.gather(
