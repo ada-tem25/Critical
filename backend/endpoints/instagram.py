@@ -12,7 +12,7 @@ from fastapi import APIRouter
 import yt_dlp
 
 # Import AssemblyAI helpers from STT module
-from STT import (
+from endpoints.stt import (
     upload_to_assemblyai,
     create_transcription_job,
     poll_transcription_result,
@@ -113,7 +113,7 @@ async def transcribe_instagram(request: InstagramTranscriptionRequest):
     4. Poll until completion of the transcription
     5. Returns the post transcription and metadata
     """
-    
+
     try:
         preprocessing_t0 = time.perf_counter()
 
@@ -127,11 +127,18 @@ async def transcribe_instagram(request: InstagramTranscriptionRequest):
                 print(f"[Instagram] Audio téléchargé: {audio_path} ({duration}s)")
                 print(f"[Instagram] Compte: {metadata.get('uploader')} | Date: {metadata.get('upload_date')}")
             except Exception as e:
-                print(f"[Instagram] Erreur téléchargement: {e}")
+                error_msg = str(e)
+                print(f"[Instagram] Erreur téléchargement: {error_msg}")
+                if "empty media response" in error_msg.lower():
+                    return InstagramTranscriptionResponse(
+                        status="error",
+                        error_code="POST_UNAVAILABLE",
+                        message="Ce post Instagram semble avoir été supprimé ou n'est plus accessible publiquement."
+                    )
                 return InstagramTranscriptionResponse(
                     status="error",
                     error_code="DOWNLOAD_FAILED",
-                    message=f"Impossible de télécharger l'audio: {str(e)}"
+                    message=f"Impossible de télécharger l'audio: {error_msg}"
                 )
 
             # 2. Upload the audio to AssemblyAI and get the upload_url where the file will be transcribed on AssemblyAI's API.
@@ -160,8 +167,7 @@ async def transcribe_instagram(request: InstagramTranscriptionRequest):
             try:
                 TRANSCRIPTION_TIMEOUT_SECONDS = 120  # Max timeout for transcribing an Instagram audio (in seconds)
                 result = await poll_transcription_result(transcript_id, TRANSCRIPTION_TIMEOUT_SECONDS)
-                print(f"[Instagram] Confiance: {result.get('confidence')}")
-                print("[Instagram] Transcription:", result.get("text"))
+                print(f"[Instagram] Transcription réussie | Confiance: {result.get('confidence')}")
             except TimeoutError:
                 return InstagramTranscriptionResponse(
                     status="error",

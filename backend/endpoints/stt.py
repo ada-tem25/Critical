@@ -24,7 +24,7 @@ SAMPLE_RATE = 16000
 # AssemblyAI audio streaming model (this one detects the language automatically, no need to specify it in the frontend)
 SPEECH_MODEL = "universal-streaming-multilingual"
 
-# AssemblyAI transcription model for pre-recorded audio (for the Instagram transcription endpoint, which is separate from the streaming WebSocket). 
+# AssemblyAI transcription model for pre-recorded audio (for the Instagram transcription endpoint, which is separate from the streaming WebSocket).
 TRANSCRIPTION_MODEL = "universal-2"
 
 # Time in seconds without any transcription before considering it a silence and stopping the stream
@@ -76,7 +76,7 @@ async def websocket_transcribe(websocket: WebSocket, mode: str = Query(default="
 
         # We connect to AssemblyAI's WebSocket
         try:
-            assemblyai_ws = await websockets.connect(ws_url, additional_headers={"Authorization": assemblyai_api_key}) 
+            assemblyai_ws = await websockets.connect(ws_url, additional_headers={"Authorization": assemblyai_api_key})
             print("Connexion Backend<-->AssemblyAI établie")
         except websockets.exceptions.InvalidStatusCode as e: # Specific errors explained by AssemblyAI
             print(f"Erreur connexion AssemblyAI: HTTP {e.status_code}")
@@ -192,7 +192,7 @@ async def websocket_transcribe(websocket: WebSocket, mode: str = Query(default="
                 await transcription_queue.put({"error": str(e)})
 
 
-        # 3rd concurrent task of the websocket: sends the messages from the transcription_queue to the frontend in real-time. In "micro" mode, these messages contain the transcriptions. In "speech" mode, these messages only contain the confidence scores and the finality status, but not the transcriptions themselves 
+        # 3rd concurrent task of the websocket: sends the messages from the transcription_queue to the frontend in real-time. In "micro" mode, these messages contain the transcriptions. In "speech" mode, these messages only contain the confidence scores and the finality status, but not the transcriptions themselves
         async def send_transcriptions_to_client():
             while not should_stop.is_set():
                 try:

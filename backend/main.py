@@ -9,9 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from STT import router as stt_router
-from instagram import router as instagram_router
-from text_input import router as text_input_router
+from endpoints.stt import router as stt_router
+from endpoints.instagram import router as instagram_router
+from endpoints.text_input import router as text_input_router
 
 app = FastAPI()
 

@@ -89,7 +89,9 @@ Input: { claim, child_results }
 ```
 Generate Queries L2
 │   Generates 1-3 search queries to verify the author's claims.
-│   Uses claim type to adapt query strategy.
+│   Uses claim type to adapt query strategy. For exemple, for statistics, we'll also recontextualize it, 
+|   find if there is a better one to settle this matter etc. 
+|   If the claim type is inconsistent with the set rules, do a basic search. 
 │   Receives child_results in its prompt context.
 │
 ▼
