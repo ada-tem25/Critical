@@ -14,8 +14,8 @@ from prompts.decomposer import decomposer_instructions, decomposer_corrector_ins
 
 load_dotenv()
 
-llm = ChatAnthropic(model="claude-sonnet-4-20250514")
-llm_haiku = ChatAnthropic(model="claude-haiku-4-5-20251001")
+llm = ChatAnthropic(model="claude-sonnet-4-20250514", temperature=0)
+llm_haiku = ChatAnthropic(model="claude-haiku-4-5-20251001", temperature=0)
 
 
 class ClaimList(BaseModel):
