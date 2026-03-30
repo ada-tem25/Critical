@@ -21,6 +21,13 @@ RHETORIC_NAMES = [
     "appeal_to_tradition",
     "slippery_slope",
     "no_true_scotsman",
+    "ad_hominem",
+    "whataboutism",
+    "cherry_picking",
+    "false_equivalence",
+    "anecdotal_evidence",
+    "appeal_to_fear",
+    "appeal_to_ignorance",
 ]
 
 VALID_RHETORIC_NAMES = set(RHETORIC_NAMES)
@@ -54,7 +61,7 @@ RHETORIC_TRANSLATIONS = { #Other languages must be added!
         "zero_cost_lie": {
             "label": "Mensonge à coût zéro",
             "definition": "Énoncer une affirmation fausse ou invérifiable sur le moment, en comptant sur le fait que personne ne prendra la peine de vérifier ou que le démenti n'aura jamais autant de visibilité que l'affirmation initiale.",
-            "examples": [ #AMELIORER
+            "examples": [
                 "« J'ai lu une étude de Harvard qui montre exactement ça. » — Aucune référence précise n'est donnée, et l'interlocuteur ne peut pas vérifier en direct.",
                 "« 80 % des Français pensent comme moi. » — Un chiffre inventé, lancé avec assurance pour clore le débat.",
             ],
@@ -110,7 +117,7 @@ RHETORIC_TRANSLATIONS = { #Other languages must be added!
                 "« Ce remède ancestral tibétain guérit naturellement ce que la médecine occidentale n'arrive pas à soigner. » — L'origine géographique ne constitue pas une preuve d'efficacité.",
             ],
         },
-        "appeal_to_nature": { #AMELIORER
+        "appeal_to_nature": {
             "label": "Appel à la nature",
             "definition": "Affirmer qu'une chose est bonne, saine ou souhaitable parce qu'elle est « naturelle », ou mauvaise parce qu'elle est « artificielle », sans évaluation factuelle.",
             "examples": [
@@ -146,6 +153,55 @@ RHETORIC_TRANSLATIONS = { #Other languages must be added!
             "examples": [
                 "« — Certains végans mangent du poisson. — Alors ce ne sont pas de vrais végans. » — Plutôt que d'admettre la diversité des pratiques, on déplace la définition.",
                 "« Aucun vrai patriote ne critiquerait son gouvernement. » — Redéfinir « patriote » pour exclure toute dissidence rend l'affirmation impossible à contredire.",
+            ],
+        },
+        "ad_hominem": {
+            "label": "Ad hominem",
+            "definition": "Attaquer la personne qui avance un argument plutôt que l'argument lui-même, afin de discréditer sa position sans en traiter le fond.",
+            "examples": [
+                "« Que voulez-vous qu'il comprenne à l'économie, il n'a jamais travaillé dans le privé. » — L'expérience professionnelle de la personne ne dit rien de la validité de son raisonnement.",
+            ],
+        },
+        "whataboutism": {
+            "label": "Whataboutisme",
+            "definition": "Détourner une critique en pointant le comportement d'un autre acteur, plutôt que de répondre sur le fond de la critique initiale.",
+            "examples": [
+                "« Oui mais l'autre parti a fait bien pire quand il était au pouvoir. » — La faute d'autrui ne répond pas à la critique formulée.",
+            ],
+        },
+        "cherry_picking": {
+            "label": "Cherry Picking",
+            "definition": "Sélectionner uniquement les données, exemples ou faits qui soutiennent sa thèse en ignorant ceux qui la contredisent. Contrairement à l'omission (cacher un fait précis), le picorage construit un argumentaire entier à partir d'un échantillon biaisé.",
+            "examples": [
+                "« La criminalité a augmenté de 15 % dans cette ville. » — En ne citant que la catégorie de délit qui a augmenté, alors que la criminalité globale a baissé.",
+            ],
+        },
+        "false_equivalence": {
+            "label": "Fausse équivalence",
+            "definition": "Mettre sur le même plan deux choses fondamentalement différentes pour créer une impression d'équilibre ou de symétrie trompeuse.",
+            "examples": [
+                "« Il y a des arguments des deux côtés sur le changement climatique. » — Donner autant de poids à un consensus scientifique massif qu'à une position marginale crée une fausse impression de débat équilibré.",
+            ],
+        },
+        "anecdotal_evidence": {
+            "label": "Preuve anecdotique",
+            "definition": "Utiliser un cas personnel ou un exemple isolé comme preuve d'une tendance générale, alors qu'il ne constitue pas un échantillon représentatif.",
+            "examples": [
+                "« Mon grand-père a fumé toute sa vie et il a vécu jusqu'à 95 ans, donc le tabac n'est pas si dangereux. » — Un cas individuel ne réfute pas les données épidémiologiques.",
+            ],
+        },
+        "appeal_to_fear": {
+            "label": "Appel à la peur",
+            "definition": "Utiliser la peur pour pousser vers une conclusion, en exagérant une menace ou en décrivant des conséquences catastrophiques sans les étayer.",
+            "examples": [
+                "« Si on ne ferme pas les frontières immédiatement, notre civilisation disparaîtra. » — La menace existentielle est brandie sans aucune démonstration du lien causal.",
+            ],
+        },
+        "appeal_to_ignorance": {
+            "label": "Appel à l'ignorance",
+            "definition": "Affirmer qu'une chose est vraie parce qu'on n'a pas prouvé qu'elle est fausse, ou inversement.",
+            "examples": [
+                "« Prouvez-moi que ce n'est PAS un complot. » — L'absence de preuve contraire n'est pas une preuve.",
             ],
         },
     },

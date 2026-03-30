@@ -39,6 +39,20 @@ Below is the exhaustive list of detectable devices. Use only the labels from thi
 
 16. true_scotsman — When faced with a counterexample, redefining group membership criteria to exclude it, making the original claim unfalsifiable.
 
+17. ad_hominem — Attacking the person making the argument rather than the argument itself, in order to discredit their position without addressing its substance.
+
+18. whataboutism — Deflecting a criticism by pointing to the behavior of another party, rather than addressing the original issue.
+
+19. cherry_picking — Selectively presenting only the data, examples, or facts that support one's thesis while ignoring those that contradict it. Unlike omission (hiding a single key fact), cherry picking constructs an entire argument from a biased sample.
+
+20. false_equivalence — Equating two fundamentally different things to create a misleading impression of balance or symmetry.
+
+21. anecdotal_evidence — Using a personal experience or isolated example as proof of a general trend, when it does not constitute representative evidence.
+
+22. appeal_to_fear — Using fear to push toward a conclusion by exaggerating a threat or describing catastrophic consequences without substantiation. Unlike slippery_slope (an undemonstrated logical chain), appeal to fear plays directly on emotion.
+
+23. appeal_to_ignorance — Asserting that something is true because it has not been proven false, or vice versa.
+
 
 ## DETECTION RULES
 
