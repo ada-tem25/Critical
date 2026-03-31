@@ -36,7 +36,7 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
         return analyzed
 
     async def _detect_rhetorics():
-        result, rhetoric_metrics = await detect_rhetorics(normalized)
+        result, rhetoric_metrics = await detect_rhetorics(normalized, correct=(mode == "performance"))
         all_metrics["rhetoric_detector"] = rhetoric_metrics
         return result
 
@@ -59,6 +59,7 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
     total_tokens = sum(m.get("total_tokens", 0) for m in all_metrics.values())
 
     print(f"\n{'='*50}")
+    print(f"[PIPELINE] '{mode}' mode analysis ended.")
     print(f"[PIPELINE] Total: {total_duration:.2f}s (preprocessing: {preprocessing_duration:.2f}s + pipeline: {pipeline_duration:.2f}s)")
     print(f"[PIPELINE] Timing breakdown:")
     for name, m in all_metrics.items():
