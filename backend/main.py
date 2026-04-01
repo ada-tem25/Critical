@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from endpoints.stt import router as stt_router
 from endpoints.instagram import router as instagram_router
 from endpoints.text_input import router as text_input_router
+from endpoints.inject_claims import router as inject_claims_router
 
 app = FastAPI()
 
@@ -37,6 +38,7 @@ async def root():
 app.include_router(stt_router)
 app.include_router(instagram_router)
 app.include_router(text_input_router)
+app.include_router(inject_claims_router)
 
 
 if __name__ == "__main__":

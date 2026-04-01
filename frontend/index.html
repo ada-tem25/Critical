@@ -47,6 +47,17 @@
 
                 <hr style="margin: 20px 0; border-color: #333;">
 
+                <!-- Dev: injection directe de claims -->
+                <div class="text-section">
+                    <h3>Injecter des claims (dev)</h3>
+                    <textarea id="claims-input" class="text-input" rows="6" placeholder='[{"id": 1, "idea": "...", "verifiability": "B", "type": "factual", "role": "thesis", "supports": []}]'></textarea>
+                    <button id="claims-button" class="instagram-button" style="margin-top: 0.5rem;">Injecter</button>
+                    <div id="claims-status" class="status" style="display: none;"></div>
+                    <pre id="claims-result" style="display: none; overflow: auto; max-height: 400px; background: #1a1a1a; padding: 12px; border-radius: 8px; font-size: 0.85rem; color: #ccc; margin-top: 8px;"></pre>
+                </div>
+
+                <hr style="margin: 20px 0; border-color: #333;">
+
                 <!-- Microphone transcription -->
                 <h3>Transcrire depuis le micro</h3>
                 <div class="mode-selector">
@@ -226,6 +237,54 @@
         // FR: Permettre d'envoyer avec Ctrl+Enter
         textInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) textButton.click();
+        });
+
+        // DEV: Injection directe de claims dans l'Orchestrator
+        const claimsButton = document.getElementById('claims-button');
+        const claimsInput = document.getElementById('claims-input');
+        const claimsStatus = document.getElementById('claims-status');
+        const claimsResult = document.getElementById('claims-result');
+
+        claimsButton.addEventListener('click', async () => {
+            let claims;
+            try {
+                claims = JSON.parse(claimsInput.value);
+            } catch (e) {
+                alert('JSON invalide');
+                return;
+            }
+
+            claimsButton.disabled = true;
+            claimsButton.textContent = 'En cours...';
+            claimsStatus.style.display = 'block';
+            claimsStatus.textContent = 'Injection des claims...';
+            claimsStatus.className = 'status loading';
+            claimsResult.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/inject-claims', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ claims, mode: currentMode })
+                });
+                const data = await response.json();
+
+                if (data.status === 'ok') {
+                    claimsStatus.textContent = data.message;
+                    claimsStatus.className = 'status success';
+                    claimsResult.style.display = 'block';
+                    claimsResult.textContent = JSON.stringify(data.analyzed_claims, null, 2);
+                } else {
+                    claimsStatus.textContent = `Erreur: ${data.message}`;
+                    claimsStatus.className = 'status error';
+                }
+            } catch (error) {
+                claimsStatus.textContent = `Erreur: ${error.message}`;
+                claimsStatus.className = 'status error';
+            } finally {
+                claimsButton.disabled = false;
+                claimsButton.textContent = 'Injecter';
+            }
         });
     </script>
 </body>
