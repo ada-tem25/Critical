@@ -8,7 +8,7 @@ from normalizer import NormalizedInput
 from models import PipelineResult
 from agents.decomposer import decompose
 from agents.rhetoric_detector import detect_rhetorics
-from agents.orchestrator import orchestrate
+from orchestrator import orchestrate
 from agents.writer import write_article
 
 
