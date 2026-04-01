@@ -26,7 +26,7 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
 
     # 1. Parallel: rhetoric detection || (decompose → orchestrate)
     async def _decompose_and_analyze():
-        return []  # TODO: remove — skipping decomposer while testing rhetoric detector
+        #return []  #skipping decomposer while testing rhetoric detector
         claims, decomposer_metrics = await decompose(normalized, correct=(mode == "performance"))
         all_metrics["decomposer"] = decomposer_metrics
 
@@ -36,6 +36,7 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
         return analyzed
 
     async def _detect_rhetorics():
+        return []  #skipping rhetoric detector while testing decomposer
         result, rhetoric_metrics = await detect_rhetorics(normalized, correct=(mode == "performance"))
         all_metrics["rhetoric_detector"] = rhetoric_metrics
         return result
