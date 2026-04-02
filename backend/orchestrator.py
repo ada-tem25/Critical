@@ -6,6 +6,7 @@ and launches the Analysis Workflow (Layer 2) for each claim.
 import asyncio
 from collections import defaultdict
 from models import Claim, AnalyzedClaim
+from analysis_workflow import run_analysis
 
 
 def _categorize_claims(claims: list[Claim]) -> tuple[list[Claim], list[Claim], list[Claim], list[Claim]]:
@@ -80,7 +81,7 @@ def _merge_a_claims(a_claims: list[Claim]) -> Claim:
     """Merges all A claims into a single 'Common Knowledge Questions' claim."""
     questions = "\n".join(f"- [#{c.id}] {c.idea}" for c in a_claims)
     return Claim(
-        id=-1,  # synthetic ID
+        id=a_claims[0].id,
         idea=f"Common Knowledge Questions:\n{questions}",
         verifiability="A",
         type="common_knowledge",
@@ -107,36 +108,9 @@ def _build_child_results(claim: Claim, results: dict[int, AnalyzedClaim], all_cl
 
 
 async def _analyze_claim(claim: Claim, child_results: list[dict]) -> AnalyzedClaim:
-    """Placeholder — calls the Analysis Workflow (Layer 2) for a single claim.
-    TODO: replace with actual LangGraph workflow invocation."""
+    """Sends a claim through the Analysis Workflow."""
     print(f"    → Analyzing #{claim.id} [{claim.verifiability}/{claim.type}] with {len(child_results)} child results")
-    return AnalyzedClaim(
-        claim_id=claim.id,
-        idea=claim.idea,
-        role=claim.role,
-        summary="[placeholder — analysis workflow not yet implemented]",
-        analyzed=False,
-        supports=claim.supports,
-        sources=[],
-    )
-
-
-async def _analyze_common_knowledge(merged_claim: Claim, original_a_claims: list[Claim]) -> list[AnalyzedClaim]:
-    """Placeholder — calls the Common Knowledge Teacher for all A claims in a single batch.
-    TODO: replace with actual LLM call."""
-    print(f"    → Common Knowledge Teacher: answering {len(original_a_claims)} questions")
-    return [
-        AnalyzedClaim(
-            claim_id=c.id,
-            idea=c.idea,
-            role=c.role,
-            summary="[placeholder — common knowledge teacher not yet implemented]",
-            analyzed=False,
-            supports=c.supports,
-            sources=[],
-        )
-        for c in original_a_claims
-    ]
+    return await run_analysis(claim, child_results)
 
 
 async def orchestrate(claims: list[Claim]) -> list[AnalyzedClaim]:
@@ -172,16 +146,19 @@ async def orchestrate(claims: list[Claim]) -> list[AnalyzedClaim]:
     # 3. Compute topological levels for analyzable claims
     levels = _compute_levels(analyzable_claims)
 
+    # 4. Merge A claims into level 0 (if any)
+    merged_a = None
+    if a_claims:
+        merged_a = _merge_a_claims(a_claims)
+        if levels:
+            levels[0].insert(0, merged_a)
+        else:
+            levels = [[merged_a]]
+
     print(f"[ORCHESTRATOR] Topological levels ({len(levels)}):")
     for i, level_claims in enumerate(levels):
         ids_str = ", ".join(f"#{c.id}[{c.verifiability}]" for c in level_claims)
         print(f"  Level {i}: {ids_str}")
-
-    # 4. Add merged A claim to level 0 (if any A claims exist)
-    merged_a = None
-    if a_claims:
-        merged_a = _merge_a_claims(a_claims)
-        print(f"[ORCHESTRATOR] Merged {len(a_claims)} A claims into single batch for level 0")
 
     # 5. Execute level by level
     all_claims_for_lookup = claims  # original full list for child_results lookup
@@ -191,11 +168,6 @@ async def orchestrate(claims: list[Claim]) -> list[AnalyzedClaim]:
 
         tasks = []
 
-        # At level 0, also launch the A batch
-        if i == 0 and merged_a is not None:
-            tasks.append(_analyze_common_knowledge(merged_a, a_claims))
-
-        # Launch each analyzable claim at this level
         for c in level_claims:
             child_results = _build_child_results(c, results, all_claims_for_lookup)
             tasks.append(_analyze_claim(c, child_results))
@@ -205,14 +177,8 @@ async def orchestrate(claims: list[Claim]) -> list[AnalyzedClaim]:
 
         # Collect results
         for result in level_results:
-            if isinstance(result, list):
-                # Common Knowledge Teacher returns a list
-                for r in result:
-                    results[r.claim_id] = r
-                    print(f"    ✓ #{r.claim_id} (common knowledge)")
-            else:
-                results[result.claim_id] = result
-                print(f"    ✓ #{result.claim_id}")
+            results[result.claim_id] = result
+            print(f"    ✓ #{result.claim_id}")
 
     # 6. Assemble final output (preserve original claim order)
     output = [results[c.id] for c in claims if c.id in results]
