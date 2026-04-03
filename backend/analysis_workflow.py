@@ -9,6 +9,7 @@ Output: AnalyzedClaim
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from models import Claim, AnalyzedClaim
+from agents.generate_queries import generate_queries_l2
 
 
 # =================== Internal State ===========================================
@@ -40,6 +41,9 @@ class AnalysisState(TypedDict, total=False):
     analyzed: bool
     sources: list[dict]
 
+    # Metrics (accumulated across nodes)
+    passes: list[dict]
+
 
 # =================== Nodes ========================================
 
@@ -49,10 +53,15 @@ def common_knowledge_teacher(state: AnalysisState) -> dict:
     return {"summary": "[placeholder — common knowledge teacher not yet implemented]", "analyzed": True, "sources": []}
 
 
-def generate_queries(state: AnalysisState) -> dict:
+async def generate_queries(state: AnalysisState) -> dict:
     """Generates 1-3 search queries to verify the claim."""
-    print(f"    [GENERATE QUERIES] Generating queries for claim #{state['claim_id']} [{state.get('type', '?')}]")
-    return {"queries_l2": ["placeholder query"]}
+    queries, metrics = await generate_queries_l2(
+        claim_id=state["claim_id"],
+        idea=state["idea"],
+        claim_type=state.get("type", ""),
+        child_results=state.get("child_results", []),
+    )
+    return {"queries_l2": queries, "passes": state.get("passes", []) + metrics.get("passes", [])}
 
 
 def web_research_unbiased(state: AnalysisState) -> dict:
@@ -147,9 +156,9 @@ workflow = _build_graph().compile()
 
 # =================== Entry point ==============================================
 
-async def run_analysis(claim: Claim, child_results: list[dict]) -> AnalyzedClaim:
+async def run_analysis(claim: Claim, child_results: list[dict]) -> tuple[AnalyzedClaim, dict]:
     """Runs the analysis workflow for a single claim.
-    Takes a Claim + child_results, returns an AnalyzedClaim."""
+    Takes a Claim + child_results, returns (AnalyzedClaim, metrics)."""
 
     # Build internal state from the Claim
     state: AnalysisState = {
@@ -160,11 +169,12 @@ async def run_analysis(claim: Claim, child_results: list[dict]) -> AnalyzedClaim
         "role": claim.role,
         "supports": claim.supports,
         "child_results": child_results,
+        "passes": [],
     }
 
     result = await workflow.ainvoke(state)
 
-    return AnalyzedClaim(
+    analyzed_claim = AnalyzedClaim(
         claim_id=claim.id,
         idea=claim.idea,
         role=claim.role,
@@ -174,3 +184,6 @@ async def run_analysis(claim: Claim, child_results: list[dict]) -> AnalyzedClaim
         sources=[],  # TODO: convert result["sources"] to Source objects
         analysis=result.get("analysis"),
     )
+
+    metrics = {"passes": result.get("passes", [])}
+    return analyzed_claim, metrics

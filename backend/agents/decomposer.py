@@ -15,7 +15,7 @@ from prompts.decomposer import decomposer_instructions, decomposer_corrector_ins
 load_dotenv()
 
 DECOMPOSER_MODEL = "claude-sonnet-4-6"
-CORRECTOR_MODEL = "claude-haiku-4-5-20251001"
+CORRECTOR_MODEL = "claude-haiku-4-5"
 
 llm = ChatAnthropic(model=DECOMPOSER_MODEL, temperature=0)
 llm_haiku = ChatAnthropic(model=CORRECTOR_MODEL, temperature=0)

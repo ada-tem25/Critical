@@ -107,15 +107,15 @@ def _build_child_results(claim: Claim, results: dict[int, AnalyzedClaim], all_cl
     return child_results
 
 
-async def _analyze_claim(claim: Claim, child_results: list[dict]) -> AnalyzedClaim:
-    """Sends a claim through the Analysis Workflow."""
+async def _analyze_claim(claim: Claim, child_results: list[dict]) -> tuple[AnalyzedClaim, dict]:
+    """Sends a claim through the Analysis Workflow. Returns (AnalyzedClaim, metrics)."""
     print(f"    → Analyzing #{claim.id} [{claim.verifiability}/{claim.type}] with {len(child_results)} child results")
     return await run_analysis(claim, child_results)
 
 
-async def orchestrate(claims: list[Claim]) -> list[AnalyzedClaim]:
+async def orchestrate(claims: list[Claim]) -> tuple[list[AnalyzedClaim], dict]:
     """Deterministic orchestrator. Categorizes claims, computes topological order,
-    and dispatches analysis level by level."""
+    and dispatches analysis level by level. Returns (analyzed_claims, metrics)."""
 
     print(f"\n{'='*50}")
     print(f"[ORCHESTRATOR] Received {len(claims)} claims")
@@ -131,6 +131,7 @@ async def orchestrate(claims: list[Claim]) -> list[AnalyzedClaim]:
 
     # 2. Passthrough claims (E + framing) → directly to output
     results: dict[int, AnalyzedClaim] = {}
+    all_passes: list[dict] = []
 
     for c in e_claims + framing_claims:
         results[c.id] = AnalyzedClaim(
@@ -176,9 +177,10 @@ async def orchestrate(claims: list[Claim]) -> list[AnalyzedClaim]:
         level_results = await asyncio.gather(*tasks)
 
         # Collect results
-        for result in level_results:
-            results[result.claim_id] = result
-            print(f"    ✓ #{result.claim_id}")
+        for analyzed_claim, _metrics in level_results:
+            results[analyzed_claim.claim_id] = analyzed_claim
+            all_passes.extend(_metrics.get("passes", []))
+            print(f"    ✓ #{analyzed_claim.claim_id}")
 
     # 6. Assemble final output (preserve original claim order)
     output = [results[c.id] for c in claims if c.id in results]
@@ -186,4 +188,5 @@ async def orchestrate(claims: list[Claim]) -> list[AnalyzedClaim]:
     print(f"\n[ORCHESTRATOR] Done — {len(output)} analyzed claims returned")
     print(f"{'='*50}\n")
 
-    return output
+    metrics = {"passes": all_passes}
+    return output, metrics
