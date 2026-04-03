@@ -1,49 +1,43 @@
 """
-Dev endpoint to inject claims directly into the Orchestrator, bypassing the Decomposer.
-Saves LLM credits when testing the downstream pipeline.
+Dev endpoint to inject claims directly, bypassing the Decomposer and Rhetoric Detector.
+Runs the full pipeline (Orchestrator → Writer → metrics → cost) with pre-made claims.
 """
-import time
-from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
+from normalizer import NormalizedInput
 from models import Claim
-from orchestrator import orchestrate
+from main_pipeline import run_pipeline
 
 router = APIRouter()
 
 
 class InjectClaimsRequest(BaseModel):
+    text: str
     claims: list[Claim]
     mode: str = "eco"
 
 
-class InjectClaimsResponse(BaseModel):
-    status: str
-    message: str
-    analyzed_claims: list[dict[str, Any]]
-
-
-@router.post("/api/inject-claims", response_model=InjectClaimsResponse)
+@router.post("/api/inject-claims")
 async def inject_claims(request: InjectClaimsRequest):
     if not request.claims:
-        return InjectClaimsResponse(
-            status="error",
-            message="La liste de claims est vide.",
-            analyzed_claims=[],
-        )
+        return {"status": "error", "message": "La liste de claims est vide."}
 
-    print(f"\n[INJECT] {len(request.claims)} claims reçus:")
+    normalized = NormalizedInput(
+        text=request.text,
+        source_type="injected",
+        source_url="",
+        author="",
+        date="",
+    )
+
+    print(f"\n[INJECT] {len(request.claims)} claims injectés:")
     for c in request.claims:
         print(f"  #{c.id} [{c.verifiability}/{c.type}] ({c.role}) {c.idea}")
-        if c.supports:
-            print(f"       supports: {c.supports}")
 
-    t0 = time.perf_counter()
-    analyzed = await orchestrate(request.claims)
-    duration = time.perf_counter() - t0
+    result = await run_pipeline(normalized, mode=request.mode, injected_claims=request.claims)
 
-    return InjectClaimsResponse(
-        status="ok",
-        message=f"{len(analyzed)} claims analysés en {duration:.2f}s",
-        analyzed_claims=[ac.model_dump() for ac in analyzed],
-    )
+    return {
+        "status": "ok",
+        "message": f"{len(result.analyzed_claims)} claims analysés",
+        "result": result.model_dump(),
+    }

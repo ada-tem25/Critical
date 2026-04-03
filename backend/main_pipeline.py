@@ -5,7 +5,7 @@ Orchestrates: Normalizer → (Rhetoric Detector || Decomposer → Orchestrator) 
 import asyncio
 import time
 from normalizer import NormalizedInput
-from models import PipelineResult
+from models import Claim, PipelineResult
 from agents.decomposer import decompose
 from agents.rhetoric_detector import detect_rhetorics
 from orchestrator import orchestrate
@@ -15,10 +15,11 @@ from cost import compute_cost
 
 # =================== Main entry point ========================================
 
-async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: float = 0.0, mode: str = "eco") -> PipelineResult:
+async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: float = 0.0, mode: str = "eco", injected_claims: list[Claim] | None = None) -> PipelineResult:
     """Runs the full main pipeline from a NormalizedInput to final article.
     preprocessing_duration: time spent before the pipeline (scraping, transcription, etc.)
-    mode: 'eco' (default) or 'performance' (enables the decomposition correction for now)."""
+    mode: 'eco' (default) or 'performance' (enables the decomposition correction for now).
+    injected_claims: if provided, skips Decomposer and Rhetoric Detector."""
 
     pipeline_t0 = time.perf_counter()
     all_metrics = {}
@@ -27,17 +28,20 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
 
     # 1. Parallel: rhetoric detection || (decompose → orchestrate)
     async def _decompose_and_analyze():
-        #return []  #skipping decomposer while testing rhetoric detector
-        claims, decomposer_metrics = await decompose(normalized, correct=(mode == "performance"))
-        all_metrics["decomposer"] = decomposer_metrics
+        if injected_claims is not None:
+            claims = injected_claims
+        else:
+            claims, decomposer_metrics = await decompose(normalized, correct=(mode == "performance"))
+            all_metrics["decomposer"] = decomposer_metrics
 
         t0 = time.perf_counter()
-        analyzed = await orchestrate(claims)
-        all_metrics["orchestrator"] = {"duration": time.perf_counter() - t0}
+        analyzed, orchestrator_metrics = await orchestrate(claims)
+        all_metrics["orchestrator"] = {"duration": time.perf_counter() - t0, "passes": orchestrator_metrics.get("passes", [])}
         return analyzed
 
     async def _detect_rhetorics():
-        return []  #skipping rhetoric detector while testing decomposer
+        if injected_claims is not None:
+            return []
         result, rhetoric_metrics = await detect_rhetorics(normalized, correct=(mode == "performance"))
         all_metrics["rhetoric_detector"] = rhetoric_metrics
         return result

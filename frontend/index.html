@@ -50,7 +50,8 @@
                 <!-- Dev: injection directe de claims -->
                 <div class="text-section">
                     <h3>Injecter des claims (dev)</h3>
-                    <textarea id="claims-input" class="text-input" rows="6" placeholder='[{"id": 1, "idea": "...", "verifiability": "B", "type": "factual", "role": "thesis", "supports": []}]'></textarea>
+                    <textarea id="claims-text-input" class="text-input" rows="3" placeholder="Texte original associé aux claims..."></textarea>
+                    <textarea id="claims-input" class="text-input" rows="6" style="margin-top: 0.5rem;" placeholder='[{"id": 1, "idea": "...", "verifiability": "B", "type": "factual", "role": "thesis", "supports": []}]'></textarea>
                     <button id="claims-button" class="instagram-button" style="margin-top: 0.5rem;">Injecter</button>
                     <div id="claims-status" class="status" style="display: none;"></div>
                     <pre id="claims-result" style="display: none; overflow: auto; max-height: 400px; background: #1a1a1a; padding: 12px; border-radius: 8px; font-size: 0.85rem; color: #ccc; margin-top: 8px;"></pre>
@@ -245,7 +246,15 @@
         const claimsStatus = document.getElementById('claims-status');
         const claimsResult = document.getElementById('claims-result');
 
+        const claimsTextInput = document.getElementById('claims-text-input');
+
         claimsButton.addEventListener('click', async () => {
+            const text = claimsTextInput.value.trim();
+            if (!text) {
+                alert('Veuillez entrer le texte original');
+                return;
+            }
+
             let claims;
             try {
                 claims = JSON.parse(claimsInput.value);
@@ -265,7 +274,7 @@
                 const response = await fetch('/api/inject-claims', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ claims, mode: currentMode })
+                    body: JSON.stringify({ text, claims, mode: currentMode })
                 });
                 const data = await response.json();
 
