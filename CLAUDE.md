@@ -336,6 +336,22 @@ D/interpretive (with or without substantive sources):
 
 ---
 
+## Modes: Eco vs Performance
+
+The pipeline supports two execution modes, selected by the user via the frontend toggle:
+
+- **Eco (default)** — Each LLM agent runs a single pass. Faster and cheaper.
+- **Performance** — Adds a correction/review second pass to multi-pass agents. Slower and more expensive, but higher quality.
+
+Current effects of the mode:
+
+| Agent | Eco | Performance |
+|-------|-----|-------------|
+| **Decomposer** | Sonnet extracts claims (1 pass) | + Haiku Corrector reviews and corrects the claim DAG (2 passes) |
+| **Rhetoric Detector** | Sonnet detects rhetorics (1 pass) | + Sonnet Reviewer adversarially filters false positives (2 passes) |
+
+---
+
 ## Key Architectural Decisions
 
 - **Level 2 evaluates the article.** The Synthesizer judges whether the author's evidence supports their argument. It does not independently validate the claim's subject matter.

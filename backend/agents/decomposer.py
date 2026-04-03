@@ -14,8 +14,11 @@ from prompts.decomposer import decomposer_instructions, decomposer_corrector_ins
 
 load_dotenv()
 
-llm = ChatAnthropic(model="claude-sonnet-4-20250514", temperature=0)
-llm_haiku = ChatAnthropic(model="claude-haiku-4-5-20251001", temperature=0)
+DECOMPOSER_MODEL = "claude-sonnet-4-6"
+CORRECTOR_MODEL = "claude-haiku-4-5-20251001"
+
+llm = ChatAnthropic(model=DECOMPOSER_MODEL, temperature=0)
+llm_haiku = ChatAnthropic(model=CORRECTOR_MODEL, temperature=0)
 
 
 class ClaimList(BaseModel):
@@ -32,7 +35,13 @@ async def decompose(normalized: NormalizedInput, correct: bool = False) -> tuple
 
     t0 = time.perf_counter()
     raw_response = await structured_sonnet.ainvoke([
-        SystemMessage(content=decomposer_instructions),
+        SystemMessage(content=[
+            {
+                "type": "text",
+                "text": decomposer_instructions,
+                "cache_control": {"type": "ephemeral"}
+            }
+        ]),
         HumanMessage(content=normalized.text),
     ])
     decomposer_duration = time.perf_counter() - t0
@@ -48,6 +57,7 @@ async def decompose(normalized: NormalizedInput, correct: bool = False) -> tuple
     print(f"\n{'='*50}")
     print(f"[DECOMPOSER] {len(initial_claims)} claims extracted in {decomposer_duration:.2f}s")
     print(f"[DECOMPOSER] Tokens: {usage_1.get('input_tokens', 0)} in / {usage_1.get('output_tokens', 0)} out")
+    print(f"[DECOMPOSER] Raw usage_metadata: {dict(usage_1)}")
     for c in initial_claims:
         print(f"  #{c.id} [{c.verifiability}] ({c.type}/{c.role}) {c.idea}")
         if c.supports:
@@ -63,14 +73,13 @@ async def decompose(normalized: NormalizedInput, correct: bool = False) -> tuple
 
         t1 = time.perf_counter()
         corrector_response = await structured_haiku.ainvoke([
-            SystemMessage(content=decomposer_corrector_instructions),
+            SystemMessage(content=[{"type": "text", "text": decomposer_corrector_instructions, "cache_control": {"type": "ephemeral"}}]),
             HumanMessage(content=corrector_input),
         ])
         corrector_duration = time.perf_counter() - t1
 
         if corrector_response["parsed"] is None:
             print(f"[CORRECTOR] Parsing failed: {corrector_response.get('parsing_error')}")
-            print(f"[CORRECTOR] Raw output: {corrector_response['raw'].content}")
             print(f"[CORRECTOR] Falling back to uncorrected claims")
             final_claims = initial_claims
             usage_2 = corrector_response["raw"].usage_metadata
@@ -78,7 +87,6 @@ async def decompose(normalized: NormalizedInput, correct: bool = False) -> tuple
             final_claims = corrector_response["parsed"].claims
             usage_2 = corrector_response["raw"].usage_metadata
 
-            removed = len(initial_claims) - len(final_claims)
             print(f"{'='*50}")
             print(f"[CORRECTOR] {len(final_claims)} claims after correction in {corrector_duration:.2f}s")
             print(f"[CORRECTOR] Tokens: {usage_2.get('input_tokens', 0)} in / {usage_2.get('output_tokens', 0)} out")
@@ -90,14 +98,31 @@ async def decompose(normalized: NormalizedInput, correct: bool = False) -> tuple
     else:
         final_claims = initial_claims
         corrector_duration = 0.0
-        usage_2 = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
     # ── Combine metrics ──
+    details_1 = usage_1.get("input_token_details", {})
+    passes = [
+        {
+            "model": DECOMPOSER_MODEL,
+            "input_tokens": usage_1.get("input_tokens", 0),
+            "output_tokens": usage_1.get("output_tokens", 0),
+            "cache_creation_input_tokens": details_1.get("ephemeral_5m_input_tokens", 0),
+            "cache_read_input_tokens": details_1.get("cache_read", 0),
+        },
+    ]
+    if correct:
+        details_2 = usage_2.get("input_token_details", {})
+        passes.append({
+            "model": CORRECTOR_MODEL,
+            "input_tokens": usage_2.get("input_tokens", 0),
+            "output_tokens": usage_2.get("output_tokens", 0),
+            "cache_creation_input_tokens": details_2.get("ephemeral_5m_input_tokens", 0),
+            "cache_read_input_tokens": details_2.get("cache_read", 0),
+        })
+
     metrics = {
         "duration": decomposer_duration + corrector_duration,
-        "input_tokens": usage_1.get("input_tokens", 0) + usage_2.get("input_tokens", 0),
-        "output_tokens": usage_1.get("output_tokens", 0) + usage_2.get("output_tokens", 0),
-        "total_tokens": usage_1.get("total_tokens", 0) + usage_2.get("total_tokens", 0),
+        "passes": passes,
     }
 
     return final_claims, metrics

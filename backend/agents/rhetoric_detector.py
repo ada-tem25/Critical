@@ -15,8 +15,11 @@ from rhetoric_catalog import VALID_RHETORIC_NAMES
 
 load_dotenv()
 
-llm = ChatAnthropic(model="claude-sonnet-4-20250514", temperature=0)
-llm_2 = ChatAnthropic(model="claude-sonnet-4-20250514", temperature=0)
+DETECTOR_MODEL = "claude-sonnet-4-6"
+REVIEWER_MODEL = "claude-sonnet-4-6"
+
+llm = ChatAnthropic(model=DETECTOR_MODEL, temperature=0)
+llm_2 = ChatAnthropic(model=REVIEWER_MODEL, temperature=0)
 
 
 class RhetoricList(BaseModel):
@@ -33,7 +36,7 @@ async def detect_rhetorics(normalized: NormalizedInput, correct: bool = False) -
 
     t0 = time.perf_counter()
     raw_response = await structured_llm.ainvoke([
-        SystemMessage(content=rhetoric_detector_instructions),
+        SystemMessage(content=[{"type": "text", "text": rhetoric_detector_instructions, "cache_control": {"type": "ephemeral"}}]),
         HumanMessage(content=normalized.text),
     ])
     detector_duration = time.perf_counter() - t0
@@ -63,7 +66,7 @@ async def detect_rhetorics(normalized: NormalizedInput, correct: bool = False) -
 
         t1 = time.perf_counter()
         reviewer_response = await structured_llm_2.ainvoke([
-            SystemMessage(content=rhetoric_reviewer_instructions),
+            SystemMessage(content=[{"type": "text", "text": rhetoric_reviewer_instructions, "cache_control": {"type": "ephemeral"}}]),
             HumanMessage(content=reviewer_input),
         ])
         reviewer_duration = time.perf_counter() - t1
@@ -89,7 +92,6 @@ async def detect_rhetorics(normalized: NormalizedInput, correct: bool = False) -
     else:
         final_rhetorics = initial_rhetorics
         reviewer_duration = 0.0
-        usage_2 = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
     # Validate rhetoric names against catalog
     for r in final_rhetorics:
@@ -97,11 +99,29 @@ async def detect_rhetorics(normalized: NormalizedInput, correct: bool = False) -
             print(f"[RHETORIC] WARNING: '{r.type}' is not in the rhetoric catalog")
 
     # ── Combine metrics ──
+    details_1 = usage_1.get("input_token_details", {})
+    passes = [
+        {
+            "model": DETECTOR_MODEL,
+            "input_tokens": usage_1.get("input_tokens", 0),
+            "output_tokens": usage_1.get("output_tokens", 0),
+            "cache_creation_input_tokens": details_1.get("ephemeral_5m_input_tokens", 0),
+            "cache_read_input_tokens": details_1.get("cache_read", 0),
+        },
+    ]
+    if correct:
+        details_2 = usage_2.get("input_token_details", {})
+        passes.append({
+            "model": REVIEWER_MODEL,
+            "input_tokens": usage_2.get("input_tokens", 0),
+            "output_tokens": usage_2.get("output_tokens", 0),
+            "cache_creation_input_tokens": details_2.get("ephemeral_5m_input_tokens", 0),
+            "cache_read_input_tokens": details_2.get("cache_read", 0),
+        })
+
     metrics = {
         "duration": detector_duration + reviewer_duration,
-        "input_tokens": usage_1.get("input_tokens", 0) + usage_2.get("input_tokens", 0),
-        "output_tokens": usage_1.get("output_tokens", 0) + usage_2.get("output_tokens", 0),
-        "total_tokens": usage_1.get("total_tokens", 0) + usage_2.get("total_tokens", 0),
+        "passes": passes,
     }
 
     return final_rhetorics, metrics

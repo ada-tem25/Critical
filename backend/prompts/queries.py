@@ -109,7 +109,7 @@ Return a JSON object:
 
 
 
-opinion_analysis_queries_instructions="""
+generate_queries_l3_instructions="""
 
 ### Non-Verifiable Claims (D) | Opinion
 No fact-checking is possible. These are value judgments or political opinions grounded in beliefs, sentiments, or personal values rather than objective facts.
@@ -117,7 +117,7 @@ No fact-checking is possible. These are value judgments or political opinions gr
 
 """
 
-interpretive_analysis_queries_instructions="""
+generate_queries_l4_instructions="""
 
 ### Non-Verifiable Claims (D) | interpretive
 

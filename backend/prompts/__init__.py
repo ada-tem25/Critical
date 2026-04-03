@@ -4,7 +4,7 @@ Prompts package — re-exports all prompt strings for backward compatibility.
 from prompts.decomposer import decomposer_instructions, decomposer_corrector_instructions
 from prompts.rhetoric import rhetoric_detector_instructions, rhetoric_reviewer_instructions
 from prompts.queries import (
-    fact_checking_queries_instructions,
-    opinion_analysis_queries_instructions,
-    interpretive_analysis_queries_instructions,
+    generate_queries_l2_instructions,
+    generate_queries_l3_instructions,
+    generate_queries_l4_instructions,
 )

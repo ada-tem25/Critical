@@ -10,6 +10,7 @@ from agents.decomposer import decompose
 from agents.rhetoric_detector import detect_rhetorics
 from orchestrator import orchestrate
 from agents.writer import write_article
+from cost import compute_cost
 
 
 # =================== Main entry point ========================================
@@ -55,20 +56,37 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
     total_duration = pipeline_duration + preprocessing_duration
 
     # 3. Print pipeline summary
-    total_input = sum(m.get("input_tokens", 0) for m in all_metrics.values())
-    total_output = sum(m.get("output_tokens", 0) for m in all_metrics.values())
-    total_tokens = sum(m.get("total_tokens", 0) for m in all_metrics.values())
+    total_input = 0
+    total_output = 0
+    total_cache_write = 0
+    total_cache_read = 0
+    for m in all_metrics.values():
+        for p in m.get("passes", []):
+            total_input += p.get("input_tokens", 0)
+            total_output += p.get("output_tokens", 0)
+            total_cache_write += p.get("cache_creation_input_tokens", 0)
+            total_cache_read += p.get("cache_read_input_tokens", 0)
 
     print(f"\n{'='*50}")
     print(f"[PIPELINE] '{mode}' mode analysis ended.")
     print(f"[PIPELINE] Total: {total_duration:.2f}s (preprocessing: {preprocessing_duration:.2f}s + pipeline: {pipeline_duration:.2f}s)")
     print(f"[PIPELINE] Timing breakdown:")
     for name, m in all_metrics.items():
-        tokens_str = ""
-        if m.get("total_tokens"):
-            tokens_str = f" | {m['input_tokens']} in + {m['output_tokens']} out = {m['total_tokens']} tokens"
-        print(f"  {name}: {m['duration']:.2f}s{tokens_str}")
-    print(f"[PIPELINE] Total tokens: {total_input} in + {total_output} out = {total_tokens}")
+        passes = m.get("passes", [])
+        if passes:
+            p_input = sum(p.get("input_tokens", 0) for p in passes)
+            p_output = sum(p.get("output_tokens", 0) for p in passes)
+            p_cache_r = sum(p.get("cache_read_input_tokens", 0) for p in passes)
+            cache_str = f" | cache read: {p_cache_r}" if p_cache_r else ""
+            print(f"  {name}: {m['duration']:.2f}s | {p_input} in + {p_output} out{cache_str}")
+        else:
+            print(f"  {name}: {m['duration']:.2f}s")
+    print(f"[PIPELINE] Total tokens: {total_input} in + {total_output} out")
+    if total_cache_read:
+        print(f"[PIPELINE] Cache: {total_cache_write} write + {total_cache_read} read")
+
+    # 3b. Cost breakdown
+    compute_cost(all_metrics)
     print(f"{'='*50}\n")
 
     # 4. Return result --> To be changed later
