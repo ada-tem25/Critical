@@ -5,6 +5,12 @@ Pricing per token for each model, computed dynamically from agent metrics.
 
 # Prices per token (not per million tokens)
 PRICING = {
+    "claude-sonnet-4-5": {
+        "input": 3.00 / 1_000_000,
+        "output": 15.00 / 1_000_000,
+        "cache_write": 3.75 / 1_000_000,
+        "cache_read": 0.30 / 1_000_000,
+    },
     "claude-sonnet-4-6": {
         "input": 3.00 / 1_000_000,
         "output": 15.00 / 1_000_000,
@@ -58,17 +64,19 @@ def compute_cost(all_metrics: dict) -> float:
         if not passes:
             continue
 
-        agent_cost = sum(_pass_cost(p) for p in passes)
-        total_cost += agent_cost
-
-        # Detail per pass
+        agent_cost = 0.0
         for p in passes:
+            cost = _pass_cost(p)
+            agent_cost += cost
             cache_info = ""
             cache_creation = p.get("cache_creation_input_tokens", 0)
             cache_read = p.get("cache_read_input_tokens", 0)
             if cache_creation or cache_read:
                 cache_info = f" (cache write: {cache_creation}, cache read: {cache_read})"
-            print(f"  {agent_name} [{p.get('model', '?')}]: ${agent_cost:.4f}{cache_info}")
+            label = p.get("agent", agent_name)
+            tokens_info = f" ({p.get('input_tokens', 0)}/{p.get('output_tokens', 0)})"
+            print(f"  {label} [{p.get('model', '?')}]: ${cost:.4f}{tokens_info}{cache_info}")
+        total_cost += agent_cost
 
     print(f"[COST] Total: ${total_cost:.4f}")
     return total_cost
