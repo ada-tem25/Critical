@@ -21,7 +21,7 @@ _semaphore = None
 def _get_semaphore(): #Semaphore n'envoie les requêtes à l'API que 2 à 2 pour ne pas taper le Rate Limiting
     global _semaphore
     if _semaphore is None:
-        _semaphore = asyncio.Semaphore(2)
+        _semaphore = asyncio.Semaphore(1) # 1 à 1 finalement...
     return _semaphore
 
 
@@ -71,7 +71,6 @@ async def generate_queries_l2(claim_id: int, idea: str, claim_type: str, child_r
 
     print(f"\n{'-'*50}")
     print(f"    [GENERATE QUERIES] #{claim_id} [{claim_type}] → {queries} ({duration:.2f}s)")
-    print(f"    [GENERATE QUERIES] Tokens: {usage}")
 
     metrics = {
         "duration": duration,

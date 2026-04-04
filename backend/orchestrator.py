@@ -166,6 +166,7 @@ async def orchestrate(claims: list[Claim]) -> tuple[list[AnalyzedClaim], dict]:
 
     for i, level_claims in enumerate(levels):
         print(f"\n[ORCHESTRATOR] === Executing level {i} ({len(level_claims)} claims) ===")
+        if (i==1): await asyncio.sleep(2) #Petit délai rajouté pour tenter de ne pas taper la Acceleration Limit
 
         tasks = []
 
