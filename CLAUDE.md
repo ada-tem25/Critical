@@ -48,7 +48,7 @@ User Input (link, text, media, audio...)
 ┌───────────────┐
 │ ORCHESTRATOR  │  (deterministic — not an LLM agent)
 │               │  1. Computes execution levels via topological sort.
-│               │  2. Batches all verifiability-A claims into one LLM call.
+│               │  2. Passes through E, A, and framing claims directly to Writer.
 │               │  3. Launches analysis per level, injecting child_results
 │               │     into downstream claims.
 │               │  4. Collects all results into the fully analyzed DAG.
@@ -77,7 +77,7 @@ This is a LangGraph graph called by the Orchestrator **once per claim**. The Orc
 ```
 Input: { claim, child_results }
 │
-├─ Verifiability A ──► Common Knowledge Teacher ──► END
+├─ Verifiability A ──► passthrough (handled directly by Writer)
 ├─ Verifiability B or C ──► Generate Queries L2 ──► (level 2 branch)
 ├─ Verifiability D, type opinion ──► Generate Queries L3 ──► (level 3 branch)
 ├─ Verifiability D, type interpretive ──► Generate Queries L3 ──► (level 3 interpretive branch)
@@ -313,8 +313,6 @@ D/interpretive (with or without substantive sources):
 ---
 
 ## Analysis Workflow Agent Roles Summaries
-
-**Common Knowledge Teacher** — Responds directly and briefly to verifiability-A claims without any web search. Can handle multiple A claims in a single batched call.
 
 **Generate Queries (L2)** — Generates 1-3 search queries aimed at verifying the evidence the author advances for this specific claim. Adapts queries based on claim type (statistical → find the source of the number, quote → search speech archives, etc.) and child_results if they exist.
 

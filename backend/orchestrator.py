@@ -9,24 +9,18 @@ from models import Claim, AnalyzedClaim
 from analysis_workflow import run_analysis
 
 
-def _categorize_claims(claims: list[Claim]) -> tuple[list[Claim], list[Claim], list[Claim], list[Claim]]:
-    """Splits claims into 4 categories: E, framing, A, and analyzable (B/C/D)."""
-    e_claims = []
-    framing_claims = []
-    a_claims = []
+def _categorize_claims(claims: list[Claim]) -> tuple[list[Claim], list[Claim]]:
+    """Splits claims into 2 categories: passthrough (E, framing, A) and analyzable (B/C/D)."""
+    passthrough_claims = []
     analyzable_claims = []
 
     for c in claims:
-        if c.verifiability == "E":
-            e_claims.append(c)
-        elif c.role == "framing":
-            framing_claims.append(c)
-        elif c.verifiability == "A":
-            a_claims.append(c)
+        if c.verifiability in ("E", "A") or c.role == "framing":
+            passthrough_claims.append(c)
         else:
             analyzable_claims.append(c)
 
-    return e_claims, framing_claims, a_claims, analyzable_claims
+    return passthrough_claims, analyzable_claims
 
 
 def _compute_levels(claims: list[Claim]) -> list[list[Claim]]:
@@ -77,18 +71,6 @@ def _compute_levels(claims: list[Claim]) -> list[list[Claim]]:
     return [levels_dict[i] for i in range(len(levels_dict))]
 
 
-def _merge_a_claims(a_claims: list[Claim]) -> Claim:
-    """Merges all A claims into a single 'Common Knowledge Questions' claim."""
-    questions = "\n".join(f"- [#{c.id}] {c.idea}" for c in a_claims)
-    return Claim(
-        id=a_claims[0].id,
-        idea=f"Common Knowledge Questions:\n{questions}",
-        verifiability="A",
-        type="common_knowledge",
-        role="supporting",
-        supports=[],
-    )
-
 
 def _build_child_results(claim: Claim, results: dict[int, AnalyzedClaim], all_claims: list[Claim]) -> list[dict]:
     """Builds child_results for a claim: the analysis results of claims that support it."""
@@ -121,19 +103,17 @@ async def orchestrate(claims: list[Claim]) -> tuple[list[AnalyzedClaim], dict]:
     print(f"[ORCHESTRATOR] Received {len(claims)} claims")
 
     # 1. Categorize
-    e_claims, framing_claims, a_claims, analyzable_claims = _categorize_claims(claims)
+    passthrough_claims, analyzable_claims = _categorize_claims(claims)
 
     print(f"[ORCHESTRATOR] Categories:")
-    print(f"  E (skipped):  {len(e_claims)} — {[c.id for c in e_claims]}")
-    print(f"  Framing:      {len(framing_claims)} — {[c.id for c in framing_claims]}")
-    print(f"  A (common):   {len(a_claims)} — {[c.id for c in a_claims]}")
+    print(f"  Passthrough (E/A/framing): {len(passthrough_claims)} — {[c.id for c in passthrough_claims]}")
     print(f"  Analyzable:   {len(analyzable_claims)} — {[c.id for c in analyzable_claims]}")
 
-    # 2. Passthrough claims (E + framing) → directly to output
+    # 2. Passthrough claims (E + A + framing) → directly to output
     results: dict[int, AnalyzedClaim] = {}
     all_passes: list[dict] = []
 
-    for c in e_claims + framing_claims:
+    for c in passthrough_claims:
         results[c.id] = AnalyzedClaim(
             claim_id=c.id,
             idea=c.idea,
@@ -146,15 +126,6 @@ async def orchestrate(claims: list[Claim]) -> tuple[list[AnalyzedClaim], dict]:
 
     # 3. Compute topological levels for analyzable claims
     levels = _compute_levels(analyzable_claims)
-
-    # 4. Merge A claims into level 0 (if any)
-    merged_a = None
-    if a_claims:
-        merged_a = _merge_a_claims(a_claims)
-        if levels:
-            levels[0].insert(0, merged_a)
-        else:
-            levels = [[merged_a]]
 
     print(f"[ORCHESTRATOR] Topological levels ({len(levels)}):")
     for i, level_claims in enumerate(levels):

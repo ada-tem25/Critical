@@ -47,12 +47,6 @@ class AnalysisState(TypedDict, total=False):
 
 # =================== Nodes ========================================
 
-def common_knowledge_teacher(state: AnalysisState) -> dict:
-    """Responds directly to verifiability-A claims without web search."""
-    print(f"    [CK TEACHER] Answering common knowledge claim #{state['claim_id']}")
-    return {"summary": "[placeholder — common knowledge teacher not yet implemented]", "analyzed": True, "sources": []}
-
-
 async def generate_queries(state: AnalysisState) -> dict:
     """Generates 1-3 search queries to verify the claim."""
     queries, metrics = await generate_queries_l2(
@@ -99,9 +93,7 @@ def level3_placeholder(state: AnalysisState) -> dict:
 def route_by_verifiability(state: AnalysisState) -> str:
     """Entry routing: dispatches to the right branch based on verifiability."""
     v = state.get("verifiability", "")
-    if v == "A":
-        return "common_knowledge_teacher"
-    elif v in ("B", "C"):
+    if v in ("B", "C"):
         return "generate_queries"
     elif v == "D":
         return "level3_placeholder"
@@ -123,7 +115,6 @@ def _build_graph() -> StateGraph:
     graph = StateGraph(AnalysisState)
 
     # Add nodes
-    graph.add_node("common_knowledge_teacher", common_knowledge_teacher)
     graph.add_node("generate_queries", generate_queries)
     graph.add_node("web_research_unbiased", web_research_unbiased)
     graph.add_node("sources_evaluator", sources_evaluator)
@@ -133,9 +124,6 @@ def _build_graph() -> StateGraph:
 
     # Entry: conditional edge from START
     graph.add_conditional_edges(START, route_by_verifiability)
-
-    # A branch
-    graph.add_edge("common_knowledge_teacher", END)
 
     # B/C branch: generate → research → evaluate → conditional
     graph.add_edge("generate_queries", "web_research_unbiased")
