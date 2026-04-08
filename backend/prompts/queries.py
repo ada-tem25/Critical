@@ -13,8 +13,8 @@ Adapt your strategy to the claim type:
 - comparative: comparisons often hide implicit criteria. First, identify the implicit dimension of comparison. "X is more dangerous than Y" — dangerous how? Mortality? Frequency? Long-term effects? Generate queries that test the comparison on the most reasonable interpretation of the author's implicit criteria.
 - predictive: do NOT search "will X happen". Search for the underlying evidence, the predictor's track record, and expert agreement on the assumptions. Assess its credibility. 
 
+Always prefer a single search query, only add another query if the topic has multiple checkable dimensions. Don't generate multiple similar queries. 
 If the type doesn't match these patterns, generate 1-2 straightforward queries on the core assertion.
-Use 1 query when the claim is simple, more when only if necessary (ex: it has multiple checkable dimensions).
 
 Respond with ONLY a JSON array of queries. No explanation, no preamble, no markdown fences, no rationale. 
 Example: ["query 1", "query 2"]

@@ -17,6 +17,7 @@ class Source(BaseModel):
     date: str
     anchor: str
     bias: str
+    tier: str = ""  # tier_1 (institutional), tier_2 (quality media), biased
 
 
 class Claim(BaseModel):

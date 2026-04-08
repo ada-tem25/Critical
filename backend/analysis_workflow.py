@@ -10,6 +10,8 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from models import Claim, AnalyzedClaim
 from agents.generate_queries import generate_queries_l2
+from agents.web_research import search_and_tag
+from agents.synthesizer import synthesize
 
 
 # =================== Internal State ===========================================
@@ -18,7 +20,7 @@ class AnalysisState(TypedDict, total=False):
     # Copied from the input Claim at invocation
     claim_id: int
     idea: str
-    verifiability: str          # "A", "B", "C", "D"
+    verifiability: str          # "B", "C", "D"
     type: str                   # "factual", "statistical", "quote", "event", "causal", "comparative", "predictive", "opinion"
     role: str                   # "thesis", "supporting", "counterargument"
     supports: list[int]
@@ -26,9 +28,7 @@ class AnalysisState(TypedDict, total=False):
 
     # L2 intermediate fields
     queries_l2: list[str]
-    search_results_unbiased: list[dict]
-    sources_sufficient: bool
-    search_results_biased: list[dict]
+    search_results: list[dict]  # Tagged sources from Tavily + domain tagger
     summary: str
     needs_level3: bool
 
@@ -58,28 +58,31 @@ async def generate_queries(state: AnalysisState) -> dict:
     return {"queries_l2": queries, "passes": state.get("passes", []) + metrics.get("passes", [])}
 
 
-def web_research_unbiased(state: AnalysisState) -> dict:
-    """Executes queries, retains only high-reliability sources."""
-    print(f"    [WEB RESEARCH] Searching unbiased sources for claim #{state['claim_id']} ({len(state.get('queries_l2', []))} queries)")
-    return {"search_results_unbiased": [], "sources": []}
+async def web_research(state: AnalysisState) -> dict:
+    """Executes Tavily search and tags results by domain tier."""
+    tagged_sources, metrics = await search_and_tag(
+        claim_id=state["claim_id"],
+        queries=state.get("queries_l2", []),
+    )
+    return {"search_results": tagged_sources}
 
 
-def sources_evaluator(state: AnalysisState) -> dict:
-    """Evaluates if sources are sufficient (quantity, convergence, circularity)."""
-    print(f"    [SOURCES EVAL] Evaluating sources for claim #{state['claim_id']}")
-    return {"sources_sufficient": True}
-
-
-def web_research_biased(state: AnalysisState) -> dict:
-    """Widens search to lower-reliability or biased sources."""
-    print(f"    [WEB RESEARCH BIASED] Widening search for claim #{state['claim_id']}")
-    return {"search_results_biased": [], "sources": state.get("sources", [])}
-
-
-def synthesizer(state: AnalysisState) -> dict:
+async def synthesizer_node(state: AnalysisState) -> dict:
     """Evaluates the solidity of the author's argument for this claim."""
-    print(f"    [SYNTHESIZER] Synthesizing analysis for claim #{state['claim_id']}")
-    return {"summary": "[placeholder — synthesizer not yet implemented]", "analyzed": True, "needs_level3": False}
+    result, metrics = await synthesize(
+        claim_id=state["claim_id"],
+        idea=state["idea"],
+        claim_type=state.get("type", ""),
+        child_results=state.get("child_results", []),
+        sources=state.get("search_results", []),
+    )
+    return {
+        "summary": result["summary"],
+        "needs_level3": result["needs_level3"],
+        "sources": result["sources"],
+        "analyzed": True,
+        "passes": state.get("passes", []) + metrics.get("passes", []),
+    }
 
 
 def level3_placeholder(state: AnalysisState) -> dict:
@@ -102,13 +105,6 @@ def route_by_verifiability(state: AnalysisState) -> str:
         return "level3_placeholder"
 
 
-def route_after_eval(state: AnalysisState) -> str:
-    """After sources evaluation: sufficient → synthesizer, insufficient → biased search."""
-    if state.get("sources_sufficient", False):
-        return "synthesizer"
-    return "web_research_biased"
-
-
 # =================== Graph construction =======================================
 
 def _build_graph() -> StateGraph:
@@ -116,20 +112,16 @@ def _build_graph() -> StateGraph:
 
     # Add nodes
     graph.add_node("generate_queries", generate_queries)
-    graph.add_node("web_research_unbiased", web_research_unbiased)
-    graph.add_node("sources_evaluator", sources_evaluator)
-    graph.add_node("web_research_biased", web_research_biased)
-    graph.add_node("synthesizer", synthesizer)
+    graph.add_node("web_research", web_research)
+    graph.add_node("synthesizer", synthesizer_node)
     graph.add_node("level3_placeholder", level3_placeholder)
 
     # Entry: conditional edge from START
     graph.add_conditional_edges(START, route_by_verifiability)
 
-    # B/C branch: generate → research → evaluate → conditional
-    graph.add_edge("generate_queries", "web_research_unbiased")
-    graph.add_edge("web_research_unbiased", "sources_evaluator")
-    graph.add_conditional_edges("sources_evaluator", route_after_eval)
-    graph.add_edge("web_research_biased", "synthesizer")
+    # B/C branch: generate → search → synthesize
+    graph.add_edge("generate_queries", "web_research")
+    graph.add_edge("web_research", "synthesizer")
     graph.add_edge("synthesizer", END)
 
     # D branch

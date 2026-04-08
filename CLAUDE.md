@@ -95,28 +95,21 @@ Generate Queries L2
 │   Receives child_results in its prompt context.
 │
 ▼
-Web Research (unbiased)
-│   Executes queries. Only retains high-reliability sources
-│   (news agencies, recognized media, institutions, scientific publications).
+Tavily Search + Domain Tagger (deterministic, no LLM)
+│   Executes queries via Tavily API.
+│   Tags each result by checking domain against a Python whitelist:
+│   tier_1 (institutional), tier_2 (quality media), biased (with bias tag), unknown (discarded).
+│   Passes all tagged sources (reliable + biased) to the Synthesizer.
 │
 ▼
-Sources Evaluator
-│   Evaluates if sources are sufficient (quantity, convergence, circularity).
+Synthesizer
+│   Evaluates the solidity of the AUTHOR'S argument (not the topic itself).
+│   Receives child_results + all tagged sources in its prompt context.
+│   Weighs source reliability based on tier/bias tags.
+│   Outputs: summary + needs_level3 boolean + sources.
 │
-├─ Insufficient ──► Web Research (biased)
-│                   │   Widens to lower-reliability or biased sources.
-│                   │   Explicitly tags the bias of each source.
-│                   │
-│                   ▼
-│                   Sources Evaluator (second pass) ──► Synthesizer
-│
-└─ Sufficient ──► Synthesizer
-                  │   Evaluates the solidity of the AUTHOR'S argument (not the topic itself).
-                  │   Receives child_results in its prompt context.
-                  │   Outputs: summary + needs_level3 boolean + sources.
-                  │
-                  ├─ needs_level3 = false ──► END
-                  └─ needs_level3 = true  ──► (level 3 branch)
+├─ needs_level3 = false ──► END
+└─ needs_level3 = true  ──► (level 3 branch)
 ```
 
 ### Level 3 branch — D/opinion (critical analysis)
@@ -320,13 +313,9 @@ D/interpretive (with or without substantive sources):
 
 **Generate Queries (L3 — interpretive mode)** — Generates queries oriented toward academic and intellectual contextualization: books, essays, cultural studies, political science or sociology analyses that address the same phenomenon. Does NOT search for counter-arguments or political positions.
 
-**Web Research (unbiased)** — Executes queries and only retains high-reliability sources: news agencies, recognized media, institutions, scientific publications. Returns for each source the URL, reliability tier, and a summary of relevant content.
+**Tavily Search + Domain Tagger** — Deterministic step (no LLM). Executes queries via Tavily API, deduplicates results by URL, and tags each source by checking its domain against a Python whitelist: tier_1 (institutional), tier_2 (quality media), biased (with bias tag). Unknown domains are discarded. All tagged sources are passed to the Synthesizer.
 
-**Web Research (biased)** — Executes the same queries but widens the spectrum to less reliable or politically oriented sources. Explicitly tags the bias of each source. Only activated if the Sources Evaluator judges that the first search did not provide enough information.
-
-**Sources Evaluator** — Evaluates whether the sources found by Web Research are sufficient to conclude on the claim, checking quantity, convergence, and source circularity. Redirects to Web Research (biased) if information is insufficient, or to the Synthesizer if it is.
-
-**Synthesizer** — Produces an analysis of the solidity of the author's argument for this claim, based on the sources found and the child_results. Determines via the `needs_level3` field whether the claim requires deeper critical analysis (diverging sources, gray zone topic).
+**Synthesizer** — Produces an analysis of the solidity of the author's argument for this claim, based on the tagged sources and the child_results. Weighs source reliability based on tier/bias tags. Determines via the `needs_level3` field whether the claim requires deeper critical analysis (diverging sources, gray zone topic).
 
 **Critical Analyst** — Produces the level 3 analysis: political context, main counterarguments, complementary data illuminating the debate. Its role is no longer to evaluate the article but to broaden the perspective so the reader understands the stakes beyond what the author wrote. Only used in the D/opinion branch.
 
