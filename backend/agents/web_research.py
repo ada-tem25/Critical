@@ -7,7 +7,7 @@ import time
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 from tavily import AsyncTavilyClient
-from domain_registry import DOMAIN_REGISTRY
+from domain_registry import DOMAIN_REGISTRY, get_domains
 
 load_dotenv()
 
@@ -32,7 +32,7 @@ def _tag_domain(url: str) -> dict:
     return {"tier": entry["tier"], "bias": entry.get("bias", "neutral")}
 
 
-async def search_and_tag(claim_id: int, queries: list[str]) -> tuple[list[dict], dict]:
+async def search_and_tag(claim_id: int, reliabilities: list[str], categories: list[str], regions: list[str], queries: list[str]) -> tuple[list[dict], dict]:
     """Executes Tavily searches for all queries, deduplicates, tags by domain.
     Returns (tagged_sources, metrics)."""
 
@@ -40,8 +40,15 @@ async def search_and_tag(claim_id: int, queries: list[str]) -> tuple[list[dict],
     seen_urls: set[str] = set()
     all_results: list[dict] = []
 
+    domains = get_domains(reliability=reliabilities, category=categories, region=regions)
+    print(f"    [WEB RESEARCH] #{claim_id} — Number of domains allowed: {len(domains)}")
+
     for query in queries:
-        response = await tavily.search(query=query, max_results=5)
+        response = await tavily.search(
+            query=query, 
+            include_domains=domains,
+            max_results=5
+        )
         for result in response.get("results", []):
             url = result.get("url", "")
             if url in seen_urls:
