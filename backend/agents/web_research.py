@@ -24,12 +24,31 @@ def _extract_domain(url: str) -> str:
 
 
 def _tag_domain(url: str) -> dict:
-    """Tags a URL with its tier and bias from the domain registry."""
+    """Tags a URL with its reliability, category, and bias from the domain registry."""
     domain = _extract_domain(url)
     entry = DOMAIN_REGISTRY.get(domain)
     if entry is None:
-        return {"tier": "unknown", "bias": "unknown"}
-    return {"tier": entry["tier"], "bias": entry.get("bias", "neutral")}
+        return {"reliability": "unknown", "category": "unknown", "bias": "unknown"}
+    return {
+        "reliability": entry.get("reliability", "unknown"),
+        "category": entry.get("category", "unknown"),
+        "bias": entry.get("bias", "neutral"),
+    }
+
+
+def _filter_results(results: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Filter out junk results (sitemaps, XML, too short/long). Returns (kept, discarded)."""
+    kept, discarded = [], []
+    for r in results:
+        url = r.get("url", "")
+        content = r.get("content", "")
+        if any(kw in url.lower() for kw in ["sitemap", ".xml", "/feed", "/rss"]):
+            discarded.append(r)
+        elif len(content) < 200 or len(content) > 5000:
+            discarded.append(r)
+        else:
+            kept.append(r)
+    return kept, discarded
 
 
 async def search_and_tag(claim_id: int, reliabilities: list[str], categories: list[str], regions: list[str], queries: list[str]) -> tuple[list[dict], dict]:
@@ -37,55 +56,47 @@ async def search_and_tag(claim_id: int, reliabilities: list[str], categories: li
     Returns (tagged_sources, metrics)."""
 
     t0 = time.perf_counter()
-    seen_urls: set[str] = set()
-    all_results: list[dict] = []
+    tagged_sources: list[dict] = []
 
     domains = get_domains(reliability=reliabilities, category=categories, region=regions)
     print(f"    [WEB RESEARCH] #{claim_id} — Number of domains allowed: {len(domains)}")
 
     for query in queries:
         response = await tavily.search(
-            query=query, 
+            query=query,
             include_domains=domains,
-            max_results=5
+            max_results=6
         )
         for result in response.get("results", []):
             url = result.get("url", "")
-            if url in seen_urls:
-                continue
-            seen_urls.add(url)
 
             tag = _tag_domain(url)
-            all_results.append({
+            tagged_sources.append({
                 "url": url,
                 "title": result.get("title", ""),
                 "content": result.get("content", ""),
-                "tier": tag["tier"],
+                "reliability": tag["reliability"],
+                "category": tag["category"],
                 "bias": tag["bias"],
             })
 
-    # Filter out unknown sources
-    tagged_sources = [r for r in all_results if r["tier"] != "unknown"]
-    unknown_count = len(all_results) - len(tagged_sources)
-
+    # Filter junk results that may come out of the Tavily API call
+    kept, discarded = _filter_results(tagged_sources)
     duration = time.perf_counter() - t0
 
-    print(f"    [WEB RESEARCH] #{claim_id} — {len(all_results)} results, {len(tagged_sources)} kept, {unknown_count} discarded ({duration:.2f}s)")
-    if tagged_sources:
-        print(f"    [WEB RESEARCH] Kept:")
-        for s in tagged_sources:
-            print(f"      [{s['tier']}] {_extract_domain(s['url'])} — {s['title'][:80]}")
-    unknown_sources = [r for r in all_results if r["tier"] == "unknown"]
-    if unknown_sources:
-        print(f"    [WEB RESEARCH] Discarded (unknown):")
-        for s in unknown_sources:
-            print(f"      {_extract_domain(s['url'])} — {s['title'][:80]}")
+    print(f"    [WEB RESEARCH] #{claim_id} — {len(tagged_sources)} raw, {len(kept)} kept, {len(discarded)} filtered ({duration:.2f}s)")
+    for s in kept:
+        print(f"      [{s['reliability']}/{s['category']}] {s['url']}")
+    if discarded:
+        print(f"    [WEB RESEARCH] Filtered out:")
+        for s in discarded:
+            print(f"      {s['url']} ({len(s['content'])} chars)")
 
     metrics = {
         "duration": duration,
-        "total_results": len(all_results),
-        "tagged_results": len(tagged_sources),
-        "unknown_discarded": unknown_count,
+        "total_results": len(tagged_sources),
+        "kept": len(kept),
+        "filtered": len(discarded),
     }
 
-    return tagged_sources, metrics
+    return kept, metrics

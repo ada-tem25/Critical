@@ -23,7 +23,7 @@ def get_categories_for_type(claim_type: str) -> list[str]:
         # Something happened — news coverage is king
         "event": [
             "fact_checking", "news_agency", "encyclopedia",
-            "press_general", "audiovisual",
+            "press_general", "press_economic", "press_investigate", "audiovisual",
         ],
         # Cause-effect — needs studies, expert analysis
         "causal": [

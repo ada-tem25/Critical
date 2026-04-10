@@ -4,21 +4,31 @@ Receives tagged sources from web research + child_results.
 """
 import json
 import time
+from typing import Optional
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
+from pydantic import BaseModel, Field
 from prompts.synthesizing import synthesizer_l2_instructions
 
 load_dotenv()
 
-SYNTHESIZER_MODEL = "claude-sonnet-4-6"
+SYNTHESIZER_MODEL = "claude-haiku-4-5"
 
 llm = ChatAnthropic(model=SYNTHESIZER_MODEL, temperature=0)
 
 
+class SynthesizerOutput(BaseModel):
+    summary: str = Field(description="Analysis of the solidity of the author's argument for this claim.")
+    needs_level3: bool = Field(description="Whether this claim requires deeper critical analysis (level 3).")
+    idea: Optional[str] = Field(default=None, description="The claim idea — only included when needs_level3 is true.")
+    claim_type: Optional[str] = Field(default=None, description="The claim type — only included when needs_level3 is true.")
+    child_results: Optional[list[dict]] = Field(default=None, description="Child results — only included when needs_level3 is true.")
+
+
 async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: list[dict], sources: list[dict]) -> tuple[dict, dict]:
     """LLM agent. Analyzes the solidity of the author's argument based on sources.
-    Returns ({summary, needs_level3, sources}, metrics)."""
+    Returns ({summary, needs_level3, sources, idea?, claim_type?, child_results?}, metrics)."""
 
     claim_context = {
         "idea": idea,
@@ -27,30 +37,46 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
         "sources": sources,
     }
 
+    # Debug: inspect source sizes
+    context_json = json.dumps(claim_context, ensure_ascii=False)
+    print(f"    [SYNTHESIZER] #{claim_id} — Input size: {len(context_json)} chars")
+    print(f"    [SYNTHESIZER] #{claim_id} — Sources: {len(sources)} items, total content chars: {sum(len(s.get('content', '')) for s in sources)}")
+    for i, s in enumerate(sources):
+        print(f"      source[{i}]: {len(s.get('content', ''))} chars — {s['url'][:100]}")
+
+    structured_llm = llm.with_structured_output(SynthesizerOutput, include_raw=True)
+
     t0 = time.perf_counter()
-    response = await llm.ainvoke([
+    raw_response = await structured_llm.ainvoke([
         SystemMessage(content=[{"type": "text", "text": synthesizer_l2_instructions, "cache_control": {"type": "ephemeral"}}]),
-        HumanMessage(content=json.dumps(claim_context, ensure_ascii=False)),
+        HumanMessage(content=context_json),
     ])
     duration = time.perf_counter() - t0
 
-    usage = response.usage_metadata
+    usage = raw_response["raw"].usage_metadata
     details = usage.get("input_token_details", {})
 
-    raw_text = response.content if isinstance(response.content, str) else response.content[0].get("text", "")
+    if raw_response["parsed"] is None:
+        print(f"    [SYNTHESIZER] #{claim_id} Parsing failed: {raw_response.get('parsing_error')}")
+        raw_text = raw_response["raw"].content if isinstance(raw_response["raw"].content, str) else raw_response["raw"].content[0].get("text", "")
+        result = {"summary": raw_text, "needs_level3": False, "sources": sources}
+    else:
+        parsed = raw_response["parsed"]
+        print(f"    [SYNTHESIZER] #{claim_id} [{claim_type}] ({duration:.2f}s)")
+        print(f"    [SYNTHESIZER] Result: needs_level3={parsed.needs_level3}")
+        print(f"    [SYNTHESIZER] Summary:\n{parsed.summary}")
 
-    print(f"\n{'-'*50}")
-    print(f"    [SYNTHESIZER] #{claim_id} [{claim_type}] ({duration:.2f}s)")
-    print(f"    [SYNTHESIZER] Result:\n{raw_text[:500]}{'...' if len(raw_text) > 500 else ''}")
-    print(f"    [SYNTHESIZER] Tokens: {usage}")
+        result = {
+            "summary": parsed.summary,
+            "needs_level3": parsed.needs_level3,
+            "sources": sources,
+        }
+        if parsed.needs_level3:
+            result["idea"] = idea
+            result["claim_type"] = claim_type
+            result["child_results"] = child_results
 
-    # TODO: parse response.content into structured output (summary, needs_level3, sources)
-    # For now, return placeholder structure
-    result = {
-        "summary": raw_text,
-        "needs_level3": False,
-        "sources": sources,
-    }
+    print(f"    [SYNTHESIZER] Tokens: {usage.get('input_tokens', 0)} in / {usage.get('output_tokens', 0)} out")
 
     metrics = {
         "duration": duration,
