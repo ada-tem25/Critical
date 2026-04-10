@@ -22,13 +22,14 @@ llm_haiku = ChatAnthropic(model=CORRECTOR_MODEL, temperature=0)
 
 
 class ClaimList(BaseModel):
-    """Wrapper for structured output (list of Claim)."""
+    """Wrapper for structured output (list of Claim + country)."""
     claims: list[Claim]
+    country: str  # ISO country code: "FR", "US", "UK", "DE", "INT", etc.
 
 
-async def decompose(normalized: NormalizedInput, correct: bool = False) -> tuple[list[Claim], dict]:
+async def decompose(normalized: NormalizedInput, correct: bool = False) -> tuple[list[Claim], str, dict]:
     """LLM agent. Decomposes text into claims (Sonnet), optionally corrects (Haiku).
-    Returns (claims, metrics) where metrics contains timing and token usage."""
+    Returns (claims, country, metrics) where metrics contains timing and token usage."""
 
     # ── Pass 1: Decomposer (Sonnet) ──
     structured_sonnet = llm.with_structured_output(ClaimList, include_raw=True)
@@ -52,10 +53,11 @@ async def decompose(normalized: NormalizedInput, correct: bool = False) -> tuple
         raise ValueError(f"Decomposer failed to produce valid output: {raw_response.get('parsing_error')}")
 
     initial_claims = raw_response["parsed"].claims
+    country = raw_response["parsed"].country
     usage_1 = raw_response["raw"].usage_metadata
 
     print(f"\n{'='*50}")
-    print(f"[DECOMPOSER] {len(initial_claims)} claims extracted in {decomposer_duration:.2f}s")
+    print(f"[DECOMPOSER] {len(initial_claims)} claims extracted in {decomposer_duration:.2f}s | country: {country}")
     print(f"[DECOMPOSER] Tokens: {usage_1.get('input_tokens', 0)} in / {usage_1.get('output_tokens', 0)} out")
     print(f"[DECOMPOSER] Raw usage_metadata: {dict(usage_1)}")
     for c in initial_claims:
@@ -125,4 +127,4 @@ async def decompose(normalized: NormalizedInput, correct: bool = False) -> tuple
         "passes": passes,
     }
 
-    return final_claims, metrics
+    return final_claims, country, metrics

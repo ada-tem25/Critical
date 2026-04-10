@@ -44,14 +44,14 @@ def _filter_results(results: list[dict]) -> tuple[list[dict], list[dict]]:
         content = r.get("content", "")
         if any(kw in url.lower() for kw in ["sitemap", ".xml", "/feed", "/rss"]):
             discarded.append(r)
-        elif len(content) < 200 or len(content) > 5000:
+        elif len(content) < 100 or len(content) > 3000:
             discarded.append(r)
         else:
             kept.append(r)
     return kept, discarded
 
 
-async def search_and_tag(claim_id: int, reliabilities: list[str], categories: list[str], regions: list[str], queries: list[str]) -> tuple[list[dict], dict]:
+async def search_and_tag(claim_id: int, reliabilities: list[str], categories: list[str], regions: list[str], queries: list[str], country: str = "INT") -> tuple[list[dict], dict]:
     """Executes Tavily searches for all queries, deduplicates, tags by domain.
     Returns (tagged_sources, metrics)."""
 
@@ -59,14 +59,17 @@ async def search_and_tag(claim_id: int, reliabilities: list[str], categories: li
     tagged_sources: list[dict] = []
 
     domains = get_domains(reliability=reliabilities, category=categories, region=regions)
-    print(f"    [WEB RESEARCH] #{claim_id} — Number of domains allowed: {len(domains)}")
+    print(f"    [WEB RESEARCH] #{claim_id} Searching... ({len(domains)} domains allowed)")
 
     for query in queries:
-        response = await tavily.search(
-            query=query,
-            include_domains=domains,
-            max_results=6
-        )
+        tavily_kwargs = {
+            "query": query,
+            "include_domains": domains,
+            "max_results": 6,
+        }
+        if country != "INT":
+            tavily_kwargs["country"] = country.lower()
+        response = await tavily.search(**tavily_kwargs)
         for result in response.get("results", []):
             url = result.get("url", "")
 
@@ -84,7 +87,11 @@ async def search_and_tag(claim_id: int, reliabilities: list[str], categories: li
     kept, discarded = _filter_results(tagged_sources)
     duration = time.perf_counter() - t0
 
-    print(f"    [WEB RESEARCH] #{claim_id} — {len(tagged_sources)} raw, {len(kept)} kept, {len(discarded)} filtered ({duration:.2f}s)")
+    # Number kept sources (1-indexed) so downstream agents can reference them as [1], [2], etc.
+    for i, s in enumerate(kept):
+        s["id"] = i + 1
+
+    print(f"    [WEB RESEARCH] #{claim_id} — {len(tagged_sources)} sources, {len(kept)} kept, {len(discarded)} filtered ({duration:.2f}s)")
     for s in kept:
         print(f"      [{s['reliability']}/{s['category']}] {s['url']}")
     if discarded:
@@ -93,10 +100,7 @@ async def search_and_tag(claim_id: int, reliabilities: list[str], categories: li
             print(f"      {s['url']} ({len(s['content'])} chars)")
 
     metrics = {
-        "duration": duration,
-        "total_results": len(tagged_sources),
-        "kept": len(kept),
-        "filtered": len(discarded),
+        "duration": duration
     }
 
     return kept, metrics

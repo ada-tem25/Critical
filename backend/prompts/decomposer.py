@@ -16,7 +16,11 @@ Given the full text of an article, social media post, transcript, or any other c
 
 ## OUTPUT FORMAT
 
-Return a JSON array of claims. Each claim has the following fields:
+Return a JSON object with two fields:
+- "claims": a JSON array of claims (see below)
+- "country": the ISO 3166-1 alpha-2 code of the country most relevant to this content (e.g. "FR", "US", "UK", "DE", "ES", "IT"). Use "INT" if the content is international or does not relate to a specific country. Determine this from the language, the named entities (politicians, institutions, cities), and the subject matter.
+
+Each claim has the following fields:
 
 - "id": integer, starting at 1
 - "idea": a single, clear, self-contained sentence summarizing the claim in your own words

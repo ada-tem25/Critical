@@ -38,7 +38,7 @@ def _parse_queries(content: str, fallback_idea: str) -> list[str]: #This functio
     return [fallback_idea]
 
 
-async def generate_queries_l2(claim_id: int, idea: str, claim_type: str, child_results: list[dict]) -> tuple[list[str], dict]:
+async def generate_queries_l2(claim_id: int, idea: str, claim_type: str, child_results: list[dict], country: str = "INT") -> tuple[list[str], dict]:
     """LLM agent. Generates 1-3 search queries for a claim.
     Returns (queries, metrics)."""
 
@@ -47,6 +47,7 @@ async def generate_queries_l2(claim_id: int, idea: str, claim_type: str, child_r
         "idea": idea,
         "type": claim_type,
         "child_results": child_results,
+        "country": country,
     }
 
     async with _get_semaphore():
@@ -67,7 +68,6 @@ async def generate_queries_l2(claim_id: int, idea: str, claim_type: str, child_r
         return [idea], {"duration": duration, "passes": []}
 
     usage = response.usage_metadata
-    details = usage.get("input_token_details", {})
 
     print(f"\n{'-'*50}")
     print(f"    [GENERATE QUERIES] #{claim_id} [{claim_type}] → {queries} ({duration:.2f}s)")
@@ -80,8 +80,6 @@ async def generate_queries_l2(claim_id: int, idea: str, claim_type: str, child_r
                 "model": GENERATE_QUERIES_MODEL,
                 "input_tokens": usage.get("input_tokens", 0),
                 "output_tokens": usage.get("output_tokens", 0),
-                "cache_creation_input_tokens": details.get("ephemeral_5m_input_tokens", 0),
-                "cache_read_input_tokens": details.get("cache_read", 0),
             },
         ],
     }

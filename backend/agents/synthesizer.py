@@ -3,6 +3,7 @@ Synthesizer agent — evaluates the solidity of the author's argument for a clai
 Receives tagged sources from web research + child_results.
 """
 import json
+import re
 import time
 from typing import Optional
 from dotenv import load_dotenv
@@ -39,22 +40,20 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
 
     # Debug: inspect source sizes
     context_json = json.dumps(claim_context, ensure_ascii=False)
-    print(f"    [SYNTHESIZER] #{claim_id} — Input size: {len(context_json)} chars")
-    print(f"    [SYNTHESIZER] #{claim_id} — Sources: {len(sources)} items, total content chars: {sum(len(s.get('content', '')) for s in sources)}")
+    print(f"    [SYNTHESIZER] #{claim_id} — Sources: {len(sources)} items, total length = {sum(len(s.get('content', '')) for s in sources)} chars (+ claim & child results --> {len(context_json)} chars)")
     for i, s in enumerate(sources):
-        print(f"      source[{i}]: {len(s.get('content', ''))} chars — {s['url'][:100]}")
+        print(f"      source[{i}]: {len(s.get('content', ''))} chars — {s.get('content', '')[:200]}")
 
     structured_llm = llm.with_structured_output(SynthesizerOutput, include_raw=True)
 
     t0 = time.perf_counter()
     raw_response = await structured_llm.ainvoke([
-        SystemMessage(content=[{"type": "text", "text": synthesizer_l2_instructions, "cache_control": {"type": "ephemeral"}}]),
+        SystemMessage(content=synthesizer_l2_instructions),
         HumanMessage(content=context_json),
     ])
     duration = time.perf_counter() - t0
 
     usage = raw_response["raw"].usage_metadata
-    details = usage.get("input_token_details", {})
 
     if raw_response["parsed"] is None:
         print(f"    [SYNTHESIZER] #{claim_id} Parsing failed: {raw_response.get('parsing_error')}")
@@ -66,10 +65,14 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
         print(f"    [SYNTHESIZER] Result: needs_level3={parsed.needs_level3}")
         print(f"    [SYNTHESIZER] Summary:\n{parsed.summary}")
 
+        # Keep only sources actually cited in the summary ([1], [3], etc.)
+        cited_ids = {int(m) for m in re.findall(r'\[(\d+)\]', parsed.summary)}
+        cited_sources = [s for s in sources if s.get("id") in cited_ids]
+
         result = {
             "summary": parsed.summary,
             "needs_level3": parsed.needs_level3,
-            "sources": sources,
+            "sources": cited_sources,
         }
         if parsed.needs_level3:
             result["idea"] = idea
@@ -86,8 +89,6 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
                 "model": SYNTHESIZER_MODEL,
                 "input_tokens": usage.get("input_tokens", 0),
                 "output_tokens": usage.get("output_tokens", 0),
-                "cache_creation_input_tokens": details.get("ephemeral_5m_input_tokens", 0),
-                "cache_read_input_tokens": details.get("cache_read", 0),
             },
         ],
     }

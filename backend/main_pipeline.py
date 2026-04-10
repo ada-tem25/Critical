@@ -30,12 +30,13 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
     async def _decompose_and_analyze():
         if injected_claims is not None:
             claims = injected_claims
+            country = "INT"
         else:
-            claims, decomposer_metrics = await decompose(normalized, correct=(mode == "performance"))
+            claims, country, decomposer_metrics = await decompose(normalized, correct=(mode == "performance"))
             all_metrics["decomposer"] = decomposer_metrics
 
         t0 = time.perf_counter()
-        analyzed, orchestrator_metrics = await orchestrate(claims)
+        analyzed, orchestrator_metrics = await orchestrate(claims, country)
         all_metrics["orchestrator"] = {"duration": time.perf_counter() - t0, "passes": orchestrator_metrics.get("passes", [])}
         return analyzed
 

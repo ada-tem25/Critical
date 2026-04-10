@@ -12,11 +12,17 @@ Adapt your strategy to the claim type:
 - causal: search for (a) established correlation, (b) expert consensus on the causal mechanism.
 - comparative: comparisons often hide implicit criteria. First, identify the implicit dimension of comparison. "X is more dangerous than Y" — dangerous how? Mortality? Frequency? Long-term effects? Generate queries that test the comparison on the most reasonable interpretation of the author's implicit criteria.
 - predictive: do NOT search "will X happen". Search for the underlying evidence, the predictor's track record, and expert agreement on the assumptions. Assess its credibility. 
-
-Always prefer a single search query, only add another query if the topic has multiple checkable dimensions. Don't generate multiple similar queries. 
 If the type doesn't match these patterns, generate 1-2 straightforward queries on the core assertion.
 
-Respond with ONLY a JSON array of queries. No explanation, no preamble, no markdown fences, no rationale. 
+Use the input "country" to write queries in the appropriate language and to take into account country-specific context when needed. 
+
+Always prefer a single search query, only add another query if the topic has multiple checkable dimensions. Don't generate multiple similar queries. 
+
+Queries MUST be 3-8 words. Never write a full sentence. Use named entities (people, cities, institutions) whenever possible.
+BAD: "city security left vs right comparison statistics"
+GOOD: "New York city police left results"
+
+Respond with ONLY a JSON array of queries. No explanation, no preamble, no markdown fences, no rationale.
 Example: ["query 1", "query 2"]
 """
 

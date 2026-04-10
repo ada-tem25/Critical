@@ -89,13 +89,13 @@ def _build_child_results(claim: Claim, results: dict[int, AnalyzedClaim], all_cl
     return child_results
 
 
-async def _analyze_claim(claim: Claim, child_results: list[dict]) -> tuple[AnalyzedClaim, dict]:
+async def _analyze_claim(claim: Claim, child_results: list[dict], country: str) -> tuple[AnalyzedClaim, dict]:
     """Sends a claim through the Analysis Workflow. Returns (AnalyzedClaim, metrics)."""
     print(f"    → Analyzing #{claim.id} [{claim.verifiability}/{claim.type}] with {len(child_results)} child results")
-    return await run_analysis(claim, child_results)
+    return await run_analysis(claim, child_results, country)
 
 
-async def orchestrate(claims: list[Claim]) -> tuple[list[AnalyzedClaim], dict]:
+async def orchestrate(claims: list[Claim], country: str = "INT") -> tuple[list[AnalyzedClaim], dict]:
     """Deterministic orchestrator. Categorizes claims, computes topological order,
     and dispatches analysis level by level. Returns (analyzed_claims, metrics)."""
 
@@ -143,7 +143,7 @@ async def orchestrate(claims: list[Claim]) -> tuple[list[AnalyzedClaim], dict]:
 
         for c in level_claims:
             child_results = _build_child_results(c, results, all_claims_for_lookup)
-            tasks.append(_analyze_claim(c, child_results))
+            tasks.append(_analyze_claim(c, child_results, country))
 
         # Run all tasks for this level in parallel
         level_results = await asyncio.gather(*tasks)

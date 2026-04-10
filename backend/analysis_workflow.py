@@ -27,6 +27,8 @@ class AnalysisState(TypedDict, total=False):
     supports: list[int]
     child_results: list[dict]
 
+    country: str                # ISO code: "FR", "US", "INT", etc.
+
     # L2 intermediate fields
     queries_l2: list[str]
     search_results: list[dict]  # Tagged sources from Tavily + domain tagger
@@ -55,6 +57,7 @@ async def generate_queries(state: AnalysisState) -> dict:
         idea=state["idea"],
         claim_type=state.get("type", ""),
         child_results=state.get("child_results", []),
+        country=state.get("country", "INT"),
     )
     return {"queries_l2": queries, "passes": state.get("passes", []) + metrics.get("passes", [])}
 
@@ -62,15 +65,23 @@ async def generate_queries(state: AnalysisState) -> dict:
 async def web_research(state: AnalysisState) -> dict:
     """Executes Tavily search and tags results by domain tier."""
     
+    #Regions filtering (for the allowed web domains)
+    country = state.get("country", "INT")
+    regions = [country, "INT"] if country != "INT" else ["INT"]
+    EU_MEMBERS = {"FR", "DE", "ES", "IT", "NL", "BE", "AT", "PT", "IE", "FI", "SE", "DK", "PL", "CZ", "GR", "RO", "BG", "HR", "HU", "SK", "SI", "LT", "LV", "EE", "CY", "MT", "LU"}
+    if country in EU_MEMBERS:
+        regions.append("EU")
+
+    #Categories filtering
     filtered_categories = get_categories_for_type(state.get("type", ""))
-    
-    
+
     tagged_sources, metrics = await search_and_tag(
         claim_id=state["claim_id"],
         reliabilities=["reference", "established"], #TODO --> Faire une seconde passe avec oriented en mode performance? Voir en fonction de la qualité des résultats
         categories=filtered_categories,
-        regions=["FR", "INT"], #TODO --> Faire que ça dépend de l'utilisateur + du claim ? 
+        regions=regions,
         queries=state.get("queries_l2", []),
+        country=country,
     )
     return {"search_results": tagged_sources}
 
@@ -145,9 +156,9 @@ workflow = _build_graph().compile()
 
 # =================== Entry point ==============================================
 
-async def run_analysis(claim: Claim, child_results: list[dict]) -> tuple[AnalyzedClaim, dict]:
+async def run_analysis(claim: Claim, child_results: list[dict], country: str = "INT") -> tuple[AnalyzedClaim, dict]:
     """Runs the analysis workflow for a single claim.
-    Takes a Claim + child_results, returns (AnalyzedClaim, metrics)."""
+    Takes a Claim + child_results + country, returns (AnalyzedClaim, metrics)."""
 
     # Build internal state from the Claim
     state: AnalysisState = {
@@ -158,6 +169,7 @@ async def run_analysis(claim: Claim, child_results: list[dict]) -> tuple[Analyze
         "role": claim.role,
         "supports": claim.supports,
         "child_results": child_results,
+        "country": country,
         "passes": [],
     }
 

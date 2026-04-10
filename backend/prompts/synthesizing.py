@@ -9,7 +9,7 @@ You receive:
 - `idea`: the claim to evaluate.
 - `type`: factual, statistical, quote, event, causal, comparative, predictive.
 - `child_results`: analyses of sub-claims supporting this one (may be empty).
-- `sources`: list of web results about the claim. 
+- `sources`: list of web results about the claim. Each source has an `id` field (1, 2, 3...).
 
 ## Instructions
 
@@ -30,12 +30,13 @@ You receive:
    - The topic sits in a political or ideological gray zone where context beyond fact-checking would help the reader.
    Set to false for clear-cut cases (confirmed, debunked) and for the types factual, statistical, quote, and event. In thoses classic fact-checking cases, if you cannot conclude it only means there is insufficient sources, a further analysis would not help. 
 
-5. **Be very concise.** Your summary should be 1-2 sentences. State your assessment directly — no hedging preamble like "Based on the available sources, it appears that...". Start with the finding.
+5. **Cite sources inline.** Reference sources by their `id` using the notation `[id]`. Example: "This number is confirmed by the INSEE [1] but contested by a 2019 study [3]." 
+
+6. **Be very concise.** Your summary should be 1-2 sentences. State your assessment directly — no hedging preamble like "Based on the available sources, it appears that...". Start with the finding.
 
 ## Output
 
 Return a JSON object with:
-- `summary`: your analysis. Written for a downstream Writer agent, not for end users.
+- `summary`: your analysis with inline source references `[id]`. Written for a downstream Writer agent, not for end users, so it must be as concise as possible. 
 - `needs_level3`: boolean.
-- `sources`: keep only the sources you actually used in your reasoning.
 """
