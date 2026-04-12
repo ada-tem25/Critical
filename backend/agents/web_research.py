@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from tavily import AsyncTavilyClient
 from domain_registry import DOMAIN_REGISTRY, get_domains
+from utils import get_tavily_country
 
 load_dotenv()
 
@@ -67,8 +68,9 @@ async def search_and_tag(claim_id: int, reliabilities: list[str], categories: li
             "include_domains": domains,
             "max_results": 6,
         }
-        if country != "INT":
-            tavily_kwargs["country"] = country.lower()
+        tavily_country = get_tavily_country(country)
+        if tavily_country:
+            tavily_kwargs["country"] = tavily_country
         response = await tavily.search(**tavily_kwargs)
         for result in response.get("results", []):
             url = result.get("url", "")
@@ -92,12 +94,6 @@ async def search_and_tag(claim_id: int, reliabilities: list[str], categories: li
         s["id"] = i + 1
 
     print(f"    [WEB RESEARCH] #{claim_id} — {len(tagged_sources)} sources, {len(kept)} kept, {len(discarded)} filtered ({duration:.2f}s)")
-    for s in kept:
-        print(f"      [{s['reliability']}/{s['category']}] {s['url']}")
-    if discarded:
-        print(f"    [WEB RESEARCH] Filtered out:")
-        for s in discarded:
-            print(f"      {s['url']} ({len(s['content'])} chars)")
 
     metrics = {
         "duration": duration

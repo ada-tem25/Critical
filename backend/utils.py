@@ -51,3 +51,23 @@ def get_categories_for_type(claim_type: str) -> list[str]:
         "institutional", "fact_checking", "news_agency",
         "press_general", "audiovisual",
     ])
+
+
+# ISO code → Tavily country name (only countries with domains in the registry)
+_ISO_TO_TAVILY = {
+    "FR": "france",
+    "US": "united states",
+    "UK": "united kingdom",
+    "DE": "germany",
+    "ES": "spain",
+    "IT": "italy",
+    "BE": "belgium",
+    "CH": "switzerland",
+    "CA": "canada",
+}
+
+
+def get_tavily_country(iso_code: str) -> str | None:
+    """Convert an ISO country code to a Tavily country name.
+    Returns None for unsupported countries (including 'INT')."""
+    return _ISO_TO_TAVILY.get(iso_code)

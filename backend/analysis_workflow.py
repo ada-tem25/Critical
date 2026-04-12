@@ -12,7 +12,7 @@ from models import Claim, AnalyzedClaim
 from agents.generate_queries import generate_queries_l2
 from agents.web_research import search_and_tag
 from agents.synthesizer import synthesize
-from utils import get_categories_for_type
+from utils import get_categories_for_type, get_tavily_country
 
 
 # =================== Internal State ===========================================
@@ -67,10 +67,14 @@ async def web_research(state: AnalysisState) -> dict:
     
     #Regions filtering (for the allowed web domains)
     country = state.get("country", "INT")
-    regions = [country, "INT"] if country != "INT" else ["INT"]
-    EU_MEMBERS = {"FR", "DE", "ES", "IT", "NL", "BE", "AT", "PT", "IE", "FI", "SE", "DK", "PL", "CZ", "GR", "RO", "BG", "HR", "HU", "SK", "SI", "LT", "LV", "EE", "CY", "MT", "LU"}
-    if country in EU_MEMBERS:
-        regions.append("EU")
+    if get_tavily_country(country) is None:
+        regions = None  # Unsupported or INT — no region filter, include all domains
+    else:
+        regions = [country, "INT"]
+        EU_MEMBERS = {"FR", "DE", "ES", "IT", "NL", "BE", "AT", "PT", "IE", "FI", "SE", "DK", "PL", "CZ", "GR", "RO", "BG", "HR", "HU", "SK", "SI", "LT", "LV", "EE", "CY", "MT", "LU"}
+        if country in EU_MEMBERS:
+            regions.append("EU")
+    print(regions)
 
     #Categories filtering
     filtered_categories = get_categories_for_type(state.get("type", ""))

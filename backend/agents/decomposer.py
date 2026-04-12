@@ -89,7 +89,6 @@ async def decompose(normalized: NormalizedInput, correct: bool = False) -> tuple
             final_claims = corrector_response["parsed"].claims
             usage_2 = corrector_response["raw"].usage_metadata
 
-            print(f"{'='*50}")
             print(f"[CORRECTOR] {len(final_claims)} claims after correction in {corrector_duration:.2f}s")
             print(f"[CORRECTOR] Tokens: {usage_2.get('input_tokens', 0)} in / {usage_2.get('output_tokens', 0)} out")
             for c in final_claims:

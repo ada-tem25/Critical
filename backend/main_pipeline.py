@@ -30,7 +30,7 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
     async def _decompose_and_analyze():
         if injected_claims is not None:
             claims = injected_claims
-            country = "INT"
+            country = "FR"
         else:
             claims, country, decomposer_metrics = await decompose(normalized, correct=(mode == "performance"))
             all_metrics["decomposer"] = decomposer_metrics

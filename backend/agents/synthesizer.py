@@ -38,11 +38,10 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
         "sources": sources,
     }
 
-    # Debug: inspect source sizes
     context_json = json.dumps(claim_context, ensure_ascii=False)
-    print(f"    [SYNTHESIZER] #{claim_id} — Sources: {len(sources)} items, total length = {sum(len(s.get('content', '')) for s in sources)} chars (+ claim & child results --> {len(context_json)} chars)")
-    for i, s in enumerate(sources):
-        print(f"      source[{i}]: {len(s.get('content', ''))} chars — {s.get('content', '')[:200]}")
+    print(f"    [SYNTHESIZER] #{claim_id} — {len(sources)} sources, {len(context_json)} chars total")
+    for s in sources:
+        print(f"      source[{s.get('id', '?')}] [{s.get('reliability', '?')}/{s.get('category', '?')}] {len(s.get('content', ''))} chars - {s.get('content', '')[:100]} — {s.get('url', '')}")
 
     structured_llm = llm.with_structured_output(SynthesizerOutput, include_raw=True)
 
@@ -61,9 +60,8 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
         result = {"summary": raw_text, "needs_level3": False, "sources": sources}
     else:
         parsed = raw_response["parsed"]
-        print(f"    [SYNTHESIZER] #{claim_id} [{claim_type}] ({duration:.2f}s)")
-        print(f"    [SYNTHESIZER] Result: needs_level3={parsed.needs_level3}")
-        print(f"    [SYNTHESIZER] Summary:\n{parsed.summary}")
+        if parsed.needs_level3: print(f"    [SYNTHESIZER] needs_level3={parsed.needs_level3}!")
+        print(f"    [SYNTHESIZER] #{claim_id} Summary:\n{parsed.summary}")
 
         # Keep only sources actually cited in the summary ([1], [3], etc.)
         cited_ids = {int(m) for m in re.findall(r'\[(\d+)\]', parsed.summary)}
