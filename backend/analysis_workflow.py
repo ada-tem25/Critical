@@ -9,10 +9,18 @@ Output: AnalyzedClaim
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from models import Claim, AnalyzedClaim
-from agents.generate_queries import generate_queries_l2
-from agents.web_research import search_and_tag
-from agents.synthesizer import synthesize
-from utils import get_categories_for_type, get_tavily_country
+from nodes.generate_queries import generate_queries_l2
+# from nodes.web_research import search_and_tag  # ANCIEN — gardé pour rollback
+from nodes.synthesizer import synthesize
+from nodes.brave_search import brave_search
+from nodes.rank_and_select import rank_and_select
+from nodes.fetch_extract import fetch_and_extract
+from nodes.reflection import reflect
+from domain_registry import get_domains
+from utils import get_categories_for_type
+
+
+EU_MEMBERS = {"FR", "DE", "ES", "IT", "NL", "BE", "AT", "PT", "IE", "FI", "SE", "DK", "PL", "CZ", "GR", "RO", "BG", "HR", "HU", "SK", "SI", "LT", "LV", "EE", "CY", "MT", "LU"}
 
 
 # =================== Internal State ===========================================
@@ -31,9 +39,16 @@ class AnalysisState(TypedDict, total=False):
 
     # L2 intermediate fields
     queries_l2: list[str]
-    search_results: list[dict]  # Tagged sources from Tavily + domain tagger
+    search_results: list[dict]  # Tagged sources from Tavily (ANCIEN) or extracted passages (NOUVEAU)
     summary: str
     needs_level3: bool
+
+    # L2 reflexive loop fields (NOUVEAU)
+    all_search_results: list[dict]   # Brave results, cumulative across iterations
+    selected_sources: list[dict]     # Top sources after ranking (current iteration)
+    extracted_passages: list[dict]   # Extracted passages, cumulative across iterations
+    loop_count: int                  # Reflection loop counter, init 0, max 2
+    sufficient: bool                 # Reflection output
 
     # L3 intermediate fields
     queries_l3: list[str]
@@ -62,42 +77,122 @@ async def generate_queries(state: AnalysisState) -> dict:
     return {"queries_l2": queries, "passes": state.get("passes", []) + metrics.get("passes", [])}
 
 
-async def web_research(state: AnalysisState) -> dict:
-    """Executes Tavily search and tags results by domain tier."""
-    
-    #Regions filtering (for the allowed web domains)
+# === ANCIEN NODE web_research (Tavily) — commenté pour rollback rapide ===
+# async def web_research(state: AnalysisState) -> dict:
+#     """Executes Tavily search and tags results by domain tier."""
+#     from utils import get_tavily_country
+#
+#     #Regions filtering (for the allowed web domains)
+#     country = state.get("country", "INT")
+#     if get_tavily_country(country) is None:
+#         regions = None
+#     else:
+#         regions = [country, "INT"]
+#         if country in EU_MEMBERS:
+#             regions.append("EU")
+#     print(regions)
+#
+#     #Categories filtering
+#     filtered_categories = get_categories_for_type(state.get("type", ""))
+#
+#     tagged_sources, metrics = await search_and_tag(
+#         claim_id=state["claim_id"],
+#         reliabilities=["reference", "established"],
+#         categories=filtered_categories,
+#         regions=regions,
+#         queries=state.get("queries_l2", []),
+#         country=country,
+#     )
+#     return {"search_results": tagged_sources}
+
+
+async def brave_search_node(state: AnalysisState) -> dict:
+    """Executes Brave search for current queries, cumulates results."""
+    queries = state.get("queries_l2", [])
     country = state.get("country", "INT")
-    if get_tavily_country(country) is None:
-        regions = None  # Unsupported or INT — no region filter, include all domains
-    else:
-        regions = [country, "INT"]
-        EU_MEMBERS = {"FR", "DE", "ES", "IT", "NL", "BE", "AT", "PT", "IE", "FI", "SE", "DK", "PL", "CZ", "GR", "RO", "BG", "HR", "HU", "SK", "SI", "LT", "LV", "EE", "CY", "MT", "LU"}
-        if country in EU_MEMBERS:
-            regions.append("EU")
-    print(regions)
 
-    #Categories filtering
-    filtered_categories = get_categories_for_type(state.get("type", ""))
+    results, metrics = await brave_search(queries, country)
 
-    tagged_sources, metrics = await search_and_tag(
-        claim_id=state["claim_id"],
-        reliabilities=["reference", "established"], #TODO --> Faire une seconde passe avec oriented en mode performance? Voir en fonction de la qualité des résultats
-        categories=filtered_categories,
-        regions=regions,
-        queries=state.get("queries_l2", []),
-        country=country,
+    # Cumulate with previous iterations
+    prev_results = state.get("all_search_results", [])
+    # Dedup by URL across iterations
+    seen_urls = {r["url"] for r in prev_results}
+    new_results = [r for r in results if r["url"] not in seen_urls]
+
+    return {
+        "all_search_results": prev_results + new_results,
+        "passes": state.get("passes", []) + metrics.get("passes", []),
+    }
+
+
+async def rank_select_node(state: AnalysisState) -> dict:
+    """Ranks and selects top sources from current search results."""
+    results = state.get("all_search_results", [])
+    idea = state.get("idea", "")
+    queries = state.get("queries_l2", [])
+
+    selected = rank_and_select(results, idea, queries)
+    return {"selected_sources": selected}
+
+
+async def fetch_extract_node(state: AnalysisState) -> dict:
+    """Fetches pages and extracts relevant passages, cumulates."""
+    sources = state.get("selected_sources", [])
+    idea = state.get("idea", "")
+    queries = state.get("queries_l2", [])
+
+    extracted, metrics = await fetch_and_extract(sources, idea, queries)
+
+    # Cumulate with previous iterations, dedup by URL
+    prev_passages = state.get("extracted_passages", [])
+    seen_urls = {p["url"] for p in prev_passages}
+    new_passages = [p for p in extracted if p["url"] not in seen_urls]
+
+    return {
+        "extracted_passages": prev_passages + new_passages,
+    }
+
+
+async def reflection_node(state: AnalysisState) -> dict:
+    """Evaluates if we have enough material, or need another research loop."""
+    passages = state.get("extracted_passages", [])
+    loop_count = state.get("loop_count", 0)
+
+    result, metrics = await reflect(
+        claim_idea=state.get("idea", ""),
+        claim_type=state.get("type", ""),
+        child_results=state.get("child_results", []),
+        passages=passages,
+        loop_count=loop_count,
     )
-    return {"search_results": tagged_sources}
+
+    update = {
+        "loop_count": loop_count + 1,
+        "sufficient": result["sufficient"],
+        "passes": state.get("passes", []) + metrics.get("passes", []),
+    }
+
+    # If insufficient, update queries for next loop iteration
+    if not result["sufficient"] and result.get("follow_up_queries"):
+        update["queries_l2"] = result["follow_up_queries"]
+
+    return update
 
 
 async def synthesizer_node(state: AnalysisState) -> dict:
     """Evaluates the solidity of the author's argument for this claim."""
+
+    # Assign 1-indexed IDs to extracted passages (deduped) before passing to synthesizer
+    passages = state.get("extracted_passages", [])
+    for i, p in enumerate(passages):
+        p["id"] = i + 1
+
     result, metrics = await synthesize(
         claim_id=state["claim_id"],
         idea=state["idea"],
         claim_type=state.get("type", ""),
         child_results=state.get("child_results", []),
-        sources=state.get("search_results", []),
+        sources=passages,
     )
     return {
         "summary": result["summary"],
@@ -128,6 +223,15 @@ def route_by_verifiability(state: AnalysisState) -> str:
         return "level3_placeholder"
 
 
+MAX_RESEARCH_LOOPS = 1  # Max reflection loop iterations (increase later if needed)
+
+def route_after_reflection(state: AnalysisState) -> str:
+    """After reflection: route to synthesizer if sufficient or max loops, else loop back."""
+    if state.get("sufficient") or state.get("loop_count", 0) > MAX_RESEARCH_LOOPS:
+        return "synthesizer"
+    return "brave_search"
+
+
 # =================== Graph construction =======================================
 
 def _build_graph() -> StateGraph:
@@ -135,18 +239,29 @@ def _build_graph() -> StateGraph:
 
     # All nodes
     graph.add_node("generate_queries", generate_queries)
-    graph.add_node("web_research", web_research)
+    graph.add_node("brave_search", brave_search_node)
+    graph.add_node("rank_and_select", rank_select_node)
+    graph.add_node("fetch_extract", fetch_extract_node)
+    graph.add_node("reflection", reflection_node)
     graph.add_node("synthesizer", synthesizer_node)
     graph.add_node("level3_placeholder", level3_placeholder)
-
 
     # Entry: conditional edge from START
     graph.add_conditional_edges(START, route_by_verifiability)
 
-    # Fact-checking Loop: generate queries → web_search → synthesize
-    graph.add_edge("generate_queries", "web_research")
-    graph.add_edge("web_research", "synthesizer")
+    # L2 fact-checking loop (NOUVEAU — Brave + fetch + reflection loop)
+    graph.add_edge("generate_queries", "brave_search")
+    graph.add_edge("brave_search", "rank_and_select")
+    graph.add_edge("rank_and_select", "fetch_extract")
+    graph.add_edge("fetch_extract", "reflection")
+    graph.add_conditional_edges("reflection", route_after_reflection)
     graph.add_edge("synthesizer", END)
+
+    # === ANCIEN WIRING L2 (Tavily) — commenté pour rollback rapide ===
+    # graph.add_node("web_research", web_research)
+    # graph.add_edge("generate_queries", "web_research")
+    # graph.add_edge("web_research", "synthesizer")
+    # graph.add_edge("synthesizer", END)
 
     # D branch #TODO
     graph.add_edge("level3_placeholder", END)
@@ -175,6 +290,7 @@ async def run_analysis(claim: Claim, child_results: list[dict], country: str = "
         "child_results": child_results,
         "country": country,
         "passes": [],
+        "loop_count": 0,
     }
 
     result = await workflow.ainvoke(state)

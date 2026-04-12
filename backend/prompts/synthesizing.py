@@ -9,7 +9,7 @@ You receive:
 - `idea`: the claim to evaluate.
 - `type`: factual, statistical, quote, event, causal, comparative, predictive.
 - `child_results`: analyses of sub-claims supporting this one (may be empty).
-- `sources`: list of web results about the claim. Each source has an `id` field (1, 2, 3...).
+- `sources`: list of web sources about the claim. Each source has an `id` field (1, 2, 3...). They contain extracted passages from full articles.
 
 ## Instructions
 

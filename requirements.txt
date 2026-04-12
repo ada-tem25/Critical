@@ -139,3 +139,4 @@ zipp==3.23.0
 zstandard==0.25.0
 sounddevice
 yt-dlp
+trafilatura

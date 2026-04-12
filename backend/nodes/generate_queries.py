@@ -63,14 +63,14 @@ async def generate_queries_l2(claim_id: int, idea: str, claim_type: str, child_r
     queries = _parse_queries(raw_text, idea)
 
     if queries == [idea]: #Error handling
-        print(f"    [GENERATE QUERIES] Parsing failed, using fallback")
-        print(f"    [GENERATE QUERIES] Raw output: {raw_text}")
+        print(f"    \033[34m[GENERATE QUERIES]\033[0m \033[33mParsing failed, using fallback\033[0m")
+        print(f"    \033[34m[GENERATE QUERIES]\033[0m \033[2mRaw output: {raw_text}\033[0m")
         return [idea], {"duration": duration, "passes": []}
 
     usage = response.usage_metadata
 
     print(f"\n{'-'*50}")
-    print(f"    [GENERATE QUERIES] #{claim_id} [{claim_type}] → {queries} ({duration:.2f}s)")
+    print(f"    \033[34m[GENERATE QUERIES]\033[0m #{claim_id} [{claim_type}] → {queries} ({duration:.2f}s)")
 
     metrics = {
         "duration": duration,

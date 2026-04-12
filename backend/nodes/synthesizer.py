@@ -39,9 +39,9 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
     }
 
     context_json = json.dumps(claim_context, ensure_ascii=False)
-    print(f"    [SYNTHESIZER] #{claim_id} — {len(sources)} sources, {len(context_json)} chars total")
+    print(f"    \033[34m[SYNTHESIZER]\033[0m #{claim_id} — {len(sources)} sources, {len(context_json)} chars total")
     for s in sources:
-        print(f"      source[{s.get('id', '?')}] [{s.get('reliability', '?')}/{s.get('category', '?')}] {len(s.get('content', ''))} chars - {s.get('content', '')[:100]} — {s.get('url', '')}")
+        print(f"      \033[2msource[{s.get('id', '?')}] [{s.get('reliability', '?')}/{s.get('category', '?')}] {len(s.get('content', ''))} chars — {s.get('url', '')}\033[0m")
 
     structured_llm = llm.with_structured_output(SynthesizerOutput, include_raw=True)
 
@@ -55,13 +55,13 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
     usage = raw_response["raw"].usage_metadata
 
     if raw_response["parsed"] is None:
-        print(f"    [SYNTHESIZER] #{claim_id} Parsing failed: {raw_response.get('parsing_error')}")
+        print(f"    \033[34m[SYNTHESIZER]\033[0m \033[31m#{claim_id} Parsing failed: {raw_response.get('parsing_error')}\033[0m")
         raw_text = raw_response["raw"].content if isinstance(raw_response["raw"].content, str) else raw_response["raw"].content[0].get("text", "")
         result = {"summary": raw_text, "needs_level3": False, "sources": sources}
     else:
         parsed = raw_response["parsed"]
-        if parsed.needs_level3: print(f"    [SYNTHESIZER] needs_level3={parsed.needs_level3}!")
-        print(f"    [SYNTHESIZER] #{claim_id} Summary:\n{parsed.summary}")
+        if parsed.needs_level3: print(f"    \033[34m[SYNTHESIZER]\033[0m \033[33mneeds_level3={parsed.needs_level3}!\033[0m")
+        print(f"    \033[34m[SYNTHESIZER]\033[0m #{claim_id} Summary:\n{parsed.summary}")
 
         # Keep only sources actually cited in the summary ([1], [3], etc.)
         cited_ids = {int(m) for m in re.findall(r'\[(\d+)\]', parsed.summary)}
@@ -77,7 +77,7 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
             result["claim_type"] = claim_type
             result["child_results"] = child_results
 
-    print(f"    [SYNTHESIZER] Tokens: {usage.get('input_tokens', 0)} in / {usage.get('output_tokens', 0)} out")
+    print(f"    \033[34m[SYNTHESIZER]\033[0m \033[2mTokens: {usage.get('input_tokens', 0)} in / {usage.get('output_tokens', 0)} out\033[0m")
 
     metrics = {
         "duration": duration,

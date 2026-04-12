@@ -6,10 +6,10 @@ import asyncio
 import time
 from normalizer import NormalizedInput
 from models import Claim, PipelineResult
-from agents.decomposer import decompose
-from agents.rhetoric_detector import detect_rhetorics
+from nodes.decomposer import decompose
+from nodes.rhetoric_detector import detect_rhetorics
 from orchestrator import orchestrate
-from agents.writer import write_article
+from nodes.writer import write_article
 from cost import compute_cost
 
 
@@ -72,27 +72,27 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
             total_cache_write += p.get("cache_creation_input_tokens", 0)
             total_cache_read += p.get("cache_read_input_tokens", 0)
 
-    print(f"\n{'='*50}")
-    print(f"[PIPELINE] '{mode}' mode analysis ended.")
-    print(f"[PIPELINE] Total: {total_duration:.2f}s (preprocessing: {preprocessing_duration:.2f}s + pipeline: {pipeline_duration:.2f}s)")
-    print(f"[PIPELINE] Timing breakdown:")
+    print(f"\n\033[1m{'='*50}\033[0m")
+    print(f"\033[1m[PIPELINE]\033[0m '{mode}' mode analysis ended.")
+    print(f"\033[1m[PIPELINE]\033[0m Total: \033[1m{total_duration:.2f}s\033[0m (preprocessing: {preprocessing_duration:.2f}s + pipeline: {pipeline_duration:.2f}s)")
+    print(f"\033[1m[PIPELINE]\033[0m Timing breakdown:")
     for name, m in all_metrics.items():
         passes = m.get("passes", [])
         if passes:
             p_input = sum(p.get("input_tokens", 0) for p in passes)
             p_output = sum(p.get("output_tokens", 0) for p in passes)
             p_cache_r = sum(p.get("cache_read_input_tokens", 0) for p in passes)
-            cache_str = f" | cache read: {p_cache_r}" if p_cache_r else ""
+            cache_str = f" \033[2m| cache read: {p_cache_r}\033[0m" if p_cache_r else ""
             print(f"  {name}: {m['duration']:.2f}s | {p_input} in + {p_output} out{cache_str}")
         else:
-            print(f"  {name}: {m['duration']:.2f}s")
-    print(f"[PIPELINE] Total tokens: {total_input} in + {total_output} out")
+            print(f"  \033[2m{name}: {m['duration']:.2f}s\033[0m")
+    print(f"\033[1m[PIPELINE]\033[0m Total tokens: {total_input} in + {total_output} out")
     if total_cache_read:
-        print(f"[PIPELINE] Cache: {total_cache_write} write + {total_cache_read} read")
+        print(f"\033[1m[PIPELINE]\033[0m \033[2mCache: {total_cache_write} write + {total_cache_read} read\033[0m")
 
     # 3b. Cost breakdown
     compute_cost(all_metrics)
-    print(f"{'='*50}\n")
+    print(f"\033[1m{'='*50}\033[0m\n")
 
     # 4. Return result --> To be changed later
     return PipelineResult(

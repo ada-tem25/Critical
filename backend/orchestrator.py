@@ -57,7 +57,7 @@ def _compute_levels(claims: list[Claim]) -> list[list[Claim]]:
 
         if not current_level:
             # Cycle detected or orphan — assign remaining to current level to avoid infinite loop
-            print(f"[ORCHESTRATOR] WARNING: cycle or orphan detected, forcing remaining claims to level {level}")
+            print(f"\033[33m[ORCHESTRATOR] WARNING: cycle or orphan detected, forcing remaining claims to level {level}\033[0m")
             current_level = list(remaining)
 
         for cid in current_level:
@@ -89,24 +89,39 @@ def _build_child_results(claim: Claim, results: dict[int, AnalyzedClaim], all_cl
     return child_results
 
 
+_semaphore = asyncio.Semaphore(3)
+
 async def _analyze_claim(claim: Claim, child_results: list[dict], country: str) -> tuple[AnalyzedClaim, dict]:
-    """Sends a claim through the Analysis Workflow. Returns (AnalyzedClaim, metrics)."""
-    print(f"    → Analyzing #{claim.id} [{claim.verifiability}/{claim.type}] with {len(child_results)} child results")
-    return await run_analysis(claim, child_results, country)
+    """Sends a claim through the Analysis Workflow with rate-limit protection.
+    Returns (AnalyzedClaim, metrics)."""
+    async with _semaphore:
+        print(f"    \033[1m→ Analyzing #{claim.id} [{claim.verifiability}/{claim.type}]\033[0m with {len(child_results)} child results")
+        for attempt in range(3):
+            try:
+                return await run_analysis(claim, child_results, country)
+            except Exception as e:
+                if "rate" in str(e).lower() or "429" in str(e):
+                    wait = 2 ** attempt
+                    print(f"    \033[33m[ORCHESTRATOR] Rate limited on #{claim.id}, retry in {wait}s (attempt {attempt + 1}/3)\033[0m")
+                    await asyncio.sleep(wait)
+                else:
+                    raise
+        # Last try without catching
+        return await run_analysis(claim, child_results, country)
 
 
 async def orchestrate(claims: list[Claim], country: str = "INT") -> tuple[list[AnalyzedClaim], dict]:
     """Deterministic orchestrator. Categorizes claims, computes topological order,
     and dispatches analysis level by level. Returns (analyzed_claims, metrics)."""
 
-    print(f"\n{'='*50}")
-    print(f"[ORCHESTRATOR] Received {len(claims)} claims")
+    print(f"\n\033[1m{'='*50}\033[0m")
+    print(f"\033[1m[ORCHESTRATOR]\033[0m Received {len(claims)} claims")
 
     # 1. Categorize
     passthrough_claims, analyzable_claims = _categorize_claims(claims)
 
-    print(f"[ORCHESTRATOR] Categories:")
-    print(f"  Passthrough (E/A/framing): {len(passthrough_claims)} — {[c.id for c in passthrough_claims]}")
+    print(f"\033[1m[ORCHESTRATOR]\033[0m Categories:")
+    print(f"  \033[2mPassthrough (E/A/framing): {len(passthrough_claims)} — {[c.id for c in passthrough_claims]}\033[0m")
     print(f"  Analyzable:   {len(analyzable_claims)} — {[c.id for c in analyzable_claims]}")
 
     # 2. Passthrough claims (E + A + framing) → directly to output
@@ -127,7 +142,7 @@ async def orchestrate(claims: list[Claim], country: str = "INT") -> tuple[list[A
     # 3. Compute topological levels for analyzable claims
     levels = _compute_levels(analyzable_claims)
 
-    print(f"[ORCHESTRATOR] Topological levels ({len(levels)}):")
+    print(f"\033[1m[ORCHESTRATOR]\033[0m Topological levels ({len(levels)}):")
     for i, level_claims in enumerate(levels):
         ids_str = ", ".join(f"#{c.id}[{c.verifiability}]" for c in level_claims)
         print(f"  Level {i}: {ids_str}")
@@ -136,8 +151,7 @@ async def orchestrate(claims: list[Claim], country: str = "INT") -> tuple[list[A
     all_claims_for_lookup = claims  # original full list for child_results lookup
 
     for i, level_claims in enumerate(levels):
-        print(f"\n[ORCHESTRATOR] === Executing level {i} ({len(level_claims)} claims) ===")
-        if (i==1): await asyncio.sleep(2) #Petit délai rajouté pour tenter de ne pas taper la Acceleration Limit
+        print(f"\n\033[1m[ORCHESTRATOR] === Executing level {i} ({len(level_claims)} claims) ===\033[0m")
 
         tasks = []
 
@@ -152,13 +166,13 @@ async def orchestrate(claims: list[Claim], country: str = "INT") -> tuple[list[A
         for analyzed_claim, _metrics in level_results:
             results[analyzed_claim.claim_id] = analyzed_claim
             all_passes.extend(_metrics.get("passes", []))
-            print(f"    ✓ #{analyzed_claim.claim_id}")
+            print(f"    \033[32m✓ #{analyzed_claim.claim_id}\033[0m")
 
     # 6. Assemble final output (preserve original claim order)
     output = [results[c.id] for c in claims if c.id in results]
 
-    print(f"\n[ORCHESTRATOR] Done — {len(output)} analyzed claims returned")
-    print(f"{'='*50}\n")
+    print(f"\n\033[1m[ORCHESTRATOR]\033[0m \033[32mDone — {len(output)} analyzed claims returned\033[0m")
+    print(f"\033[1m{'='*50}\033[0m\n")
 
     metrics = {"passes": all_passes}
     return output, metrics
