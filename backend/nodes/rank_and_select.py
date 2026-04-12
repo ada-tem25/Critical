@@ -32,12 +32,15 @@ def _snippet_relevance(snippet: str, keywords: set[str]) -> float:
     return len(overlap) / len(keywords)
 
 
-def rank_and_select(results: list[dict], idea: str, queries: list[str], min_sources: int = 3, max_sources: int = 5) -> list[dict]:
+def rank_and_select(results: list[dict], idea: str, queries: list[str], min_sources: int = 5, max_sources: int = 10, excluded_urls: set[str] | None = None) -> list[dict]:
     """Score and rank search results. Returns top sources with metadata.
 
     Scoring: reliability_weight * 0.6 + snippet_relevance * 0.4
     If <min_sources tiered sources, fills with best unknown sources.
     """
+    if excluded_urls:
+        results = [r for r in results if r["url"] not in excluded_urls]
+
     # Build keyword set from claim idea + all queries
     keywords = _extract_keywords(idea)
     for q in queries:

@@ -47,6 +47,7 @@ class AnalysisState(TypedDict, total=False):
     all_search_results: list[dict]   # Brave results, cumulative across iterations
     selected_sources: list[dict]     # Top sources after ranking (current iteration)
     extracted_passages: list[dict]   # Extracted passages, cumulative across iterations
+    failed_urls: list[str]           # URLs that returned 403/error, excluded from future ranking
     loop_count: int                  # Reflection loop counter, init 0, max 2
     sufficient: bool                 # Reflection output
 
@@ -130,8 +131,9 @@ async def rank_select_node(state: AnalysisState) -> dict:
     results = state.get("all_search_results", [])
     idea = state.get("idea", "")
     queries = state.get("queries_l2", [])
+    excluded = set(state.get("failed_urls", []))
 
-    selected = rank_and_select(results, idea, queries)
+    selected = rank_and_select(results, idea, queries, excluded_urls=excluded)
     return {"selected_sources": selected}
 
 
@@ -141,15 +143,19 @@ async def fetch_extract_node(state: AnalysisState) -> dict:
     idea = state.get("idea", "")
     queries = state.get("queries_l2", [])
 
-    extracted, metrics = await fetch_and_extract(sources, idea, queries)
+    extracted, metrics, new_failed = await fetch_and_extract(sources, idea, queries)
 
     # Cumulate with previous iterations, dedup by URL
     prev_passages = state.get("extracted_passages", [])
     seen_urls = {p["url"] for p in prev_passages}
     new_passages = [p for p in extracted if p["url"] not in seen_urls]
 
+    # Accumulate failed URLs
+    prev_failed = state.get("failed_urls", [])
+
     return {
         "extracted_passages": prev_passages + new_passages,
+        "failed_urls": prev_failed + new_failed,
     }
 
 
@@ -225,6 +231,19 @@ def route_by_verifiability(state: AnalysisState) -> str:
 
 MAX_RESEARCH_LOOPS = 1  # Max reflection loop iterations (increase later if needed)
 
+
+def route_after_ranking(state: AnalysisState) -> str:
+    """After ranking: skip to synthesizer if no new URLs to fetch."""
+    selected_urls = {s["url"] for s in state.get("selected_sources", [])}
+    already_extracted = {p["url"] for p in state.get("extracted_passages", [])}
+    failed = set(state.get("failed_urls", []))
+    new_urls = selected_urls - already_extracted - failed
+    if len(new_urls) == 0:
+        print(f"    [ROUTER] No new URLs to fetch — skipping to synthesizer")
+        return "synthesizer"
+    return "fetch_extract"
+
+
 def route_after_reflection(state: AnalysisState) -> str:
     """After reflection: route to synthesizer if sufficient or max loops, else loop back."""
     if state.get("sufficient") or state.get("loop_count", 0) > MAX_RESEARCH_LOOPS:
@@ -252,7 +271,7 @@ def _build_graph() -> StateGraph:
     # L2 fact-checking loop (NOUVEAU — Brave + fetch + reflection loop)
     graph.add_edge("generate_queries", "brave_search")
     graph.add_edge("brave_search", "rank_and_select")
-    graph.add_edge("rank_and_select", "fetch_extract")
+    graph.add_conditional_edges("rank_and_select", route_after_ranking)
     graph.add_edge("fetch_extract", "reflection")
     graph.add_conditional_edges("reflection", route_after_reflection)
     graph.add_edge("synthesizer", END)
