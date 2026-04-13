@@ -73,7 +73,9 @@ def compute_cost(all_metrics: dict) -> float:
     all_metrics: dict keyed by agent name, each value has a 'passes' list.
     Returns total cost in $."""
 
-    total_cost = 0.0
+    anthropic_cost = 0.0
+    brave_cost = 0.0
+    brave_queries = 0
 
     print(f"{_YELLOW}[COST]{_RESET} Breakdown:")
     for agent_name, metrics in all_metrics.items():
@@ -81,18 +83,17 @@ def compute_cost(all_metrics: dict) -> float:
         if not passes:
             continue
 
-        agent_cost = 0.0
         for p in passes:
             cost = _pass_cost(p)
-            agent_cost += cost
             label = p.get("agent", agent_name)
 
             if p.get("type") == "api":
-                # External API pass
                 query_count = p.get("query_count", 0)
+                brave_cost += cost
+                brave_queries += query_count
                 print(f"  {_DIM}{label}: ${cost:.4f} ({query_count} queries){_RESET}")
             else:
-                # LLM pass
+                anthropic_cost += cost
                 cache_info = ""
                 cache_creation = p.get("cache_creation_input_tokens", 0)
                 cache_read = p.get("cache_read_input_tokens", 0)
@@ -100,7 +101,9 @@ def compute_cost(all_metrics: dict) -> float:
                     cache_info = f" {_DIM}(cache write: {cache_creation}, cache read: {cache_read}){_RESET}"
                 tokens_info = f" ({p.get('input_tokens', 0)}/{p.get('output_tokens', 0)})"
                 print(f"  {label} [{p.get('model', '?')}]: ${cost:.4f}{tokens_info}{cache_info}")
-        total_cost += agent_cost
 
+    total_cost = anthropic_cost + brave_cost
+    print(f"{_YELLOW}[COST]{_RESET} Subtotal Anthropic: ${anthropic_cost:.4f}")
+    print(f"{_YELLOW}[COST]{_RESET} Subtotal Brave: ${brave_cost:.4f} ({brave_queries} queries)")
     print(f"{_YELLOW}[COST]{_RESET} {_BOLD}Total: ${total_cost:.4f}{_RESET}")
     return total_cost

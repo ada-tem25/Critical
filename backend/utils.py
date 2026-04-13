@@ -1,4 +1,11 @@
 
+def format_duration(seconds: float) -> str:
+    """Format duration: '1min 23s' if >= 60s, else '12.34s'."""
+    if seconds >= 60:
+        m, s = divmod(int(seconds), 60)
+        return f"{m}min {s}s"
+    return f"{seconds:.2f}s"
+
 
 def get_categories_for_type(claim_type: str) -> list[str]:
     """Return the relevant domain categories for a given claim type.

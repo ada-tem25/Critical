@@ -135,6 +135,8 @@ async def orchestrate(claims: list[Claim], country: str = "INT", mode: str = "ec
 
     # 5. Execute level by level
     all_claims_for_lookup = claims  # original full list for child_results lookup
+    total_analyzable = len(analyzable_claims)
+    done = 0
 
     for i, level_claims in enumerate(levels):
         print(f"\n\033[1m[ORCHESTRATOR] === Executing level {i} ({len(level_claims)} claims) ===\033[0m")
@@ -148,7 +150,10 @@ async def orchestrate(claims: list[Claim], country: str = "INT", mode: str = "ec
         # for analyzed_claim, _metrics in level_results:
         #     results[analyzed_claim.claim_id] = analyzed_claim
         #     all_passes.extend(_metrics.get("passes", []))
-        #     print(f"    \033[32m✓ #{analyzed_claim.claim_id}\033[0m")
+        #     done += 1
+        #     filled = done * 10 // total_analyzable
+        #     bar = "█" * filled + "░" * (10 - filled)
+        #     print(f"    \033[32m[{bar}] {done}/{total_analyzable} — ✓ #{analyzed_claim.claim_id}\033[0m")
 
         # === MODE SÉQUENTIEL (actif) ===
         for c in level_claims:
@@ -156,7 +161,10 @@ async def orchestrate(claims: list[Claim], country: str = "INT", mode: str = "ec
             analyzed_claim, _metrics = await _analyze_claim(c, child_results, country, mode=mode)
             results[analyzed_claim.claim_id] = analyzed_claim
             all_passes.extend(_metrics.get("passes", []))
-            print(f"    \033[32m✓ #{analyzed_claim.claim_id}\033[0m")
+            done += 1
+            filled = done * 10 // total_analyzable
+            bar = "█" * filled + "░" * (10 - filled)
+            print(f"    \033[32m[{bar}] {done}/{total_analyzable} — ✓ #{analyzed_claim.claim_id}\033[0m")
 
     # 6. Assemble final output (preserve original claim order)
     output = [results[c.id] for c in claims if c.id in results]
