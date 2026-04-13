@@ -32,7 +32,7 @@ def _snippet_relevance(snippet: str, keywords: set[str]) -> float:
     return len(overlap) / len(keywords)
 
 
-def rank_and_select(results: list[dict], idea: str, queries: list[str], min_sources: int = 5, max_sources: int = 10, excluded_urls: set[str] | None = None) -> list[dict]:
+def rank_and_select(results: list[dict], idea: str, queries: list[str], min_sources: int = 4, max_sources: int = 6, excluded_urls: set[str] | None = None) -> list[dict]:
     """Score and rank search results. Returns top sources with metadata.
 
     Scoring: reliability_weight * 0.6 + snippet_relevance * 0.4
@@ -88,8 +88,6 @@ def rank_and_select(results: list[dict], idea: str, queries: list[str], min_sour
         # Cap at max
         selected = selected[:max_sources]
 
-    print(f"    \033[35m[RANK]\033[0m {len(results)} results → {len(selected)} selected (tiered: {len(tiered)}, unknown: {len(unknown)})")
-    for s in selected:
-        print(f"      \033[2m[{s['reliability']}/{s['category']}] score={s['score']} — {s['url']}\033[0m")
+    print(f"    \033[35m[RANK]\033[0m {len(results)} results → {len(selected)} selected ({len(tiered)} tiered, {len(unknown)} unknown)")
 
     return selected

@@ -11,6 +11,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 from prompts.synthesizing import synthesizer_l2_instructions
+from llm_retry import llm_call_with_retry
 
 load_dotenv()
 
@@ -40,16 +41,17 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
 
     context_json = json.dumps(claim_context, ensure_ascii=False)
     print(f"    \033[34m[SYNTHESIZER]\033[0m #{claim_id} — {len(sources)} sources, {len(context_json)} chars total")
-    for s in sources:
-        print(f"      \033[2msource[{s.get('id', '?')}] [{s.get('reliability', '?')}/{s.get('category', '?')}] {len(s.get('content', ''))} chars — {s.get('url', '')}\033[0m")
 
     structured_llm = llm.with_structured_output(SynthesizerOutput, include_raw=True)
 
     t0 = time.perf_counter()
-    raw_response = await structured_llm.ainvoke([
-        SystemMessage(content=synthesizer_l2_instructions),
-        HumanMessage(content=context_json),
-    ])
+    raw_response = await llm_call_with_retry(
+        lambda: structured_llm.ainvoke([
+            SystemMessage(content=synthesizer_l2_instructions),
+            HumanMessage(content=context_json),
+        ]),
+        agent_name="SYNTHESIZER",
+    )
     duration = time.perf_counter() - t0
 
     usage = raw_response["raw"].usage_metadata

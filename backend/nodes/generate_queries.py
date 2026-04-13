@@ -1,7 +1,6 @@
 """
 Generate Queries agent — produces 1-3 search queries to verify a claim.
 """
-import asyncio
 import json
 import re
 import time
@@ -9,21 +8,13 @@ from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from prompts.queries import generate_queries_l2_instructions
+from llm_retry import llm_call_with_retry
 
 load_dotenv()
 
 GENERATE_QUERIES_MODEL = "claude-haiku-4-5"
 
 llm = ChatAnthropic(model=GENERATE_QUERIES_MODEL, temperature=0)
-
-_semaphore = None
-
-def _get_semaphore(): #Semaphore n'envoie les requêtes à l'API que 2 à 2 pour ne pas taper le Rate Limiting
-    global _semaphore
-    if _semaphore is None:
-        _semaphore = asyncio.Semaphore(1) # 1 à 1 finalement...
-    return _semaphore
-
 
 def _parse_queries(content: str, fallback_idea: str) -> list[str]: #This functions prevents the use of the with_structured_output tool, gaining 600 tokens per call. 
     """Extract a JSON list from LLM output, tolerating markdown fences and preamble."""
@@ -50,13 +41,15 @@ async def generate_queries_l2(claim_id: int, idea: str, claim_type: str, child_r
         "country": country,
     }
 
-    async with _get_semaphore():
-        t0 = time.perf_counter()
-        response = await llm.ainvoke([ # LLM Call
+    t0 = time.perf_counter()
+    response = await llm_call_with_retry(
+        lambda: llm.ainvoke([
             SystemMessage(content=[{"type": "text", "text": generate_queries_l2_instructions}]),
             HumanMessage(content=json.dumps(claim_context, ensure_ascii=False)),
-        ])
-        duration = time.perf_counter() - t0
+        ]),
+        agent_name="GENERATE QUERIES",
+    )
+    duration = time.perf_counter() - t0
 
     # Parse JSON list from raw response
     raw_text = response.content if isinstance(response.content, str) else response.content[0].get("text", "")

@@ -5,15 +5,16 @@ No LLM. Uses Trafilatura for content extraction + keyword paragraph selection.
 import asyncio
 import re
 import time
+from urllib.parse import urlparse
 import httpx
 import trafilatura
 from trafilatura.settings import use_config
 
 
 # Max characters per source (~800 tokens ≈ 3200 chars)
-MAX_CHARS_PER_SOURCE = 2500
+MAX_CHARS_PER_SOURCE = 3500
 
-# Browser User-Agent to reduce 403 bot-blocking
+# Browser User-Agent to avoid basic 403 bot-blocking
 _USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 _TRAF_CONFIG = use_config()
@@ -95,7 +96,7 @@ async def _fetch_single(client: httpx.AsyncClient, source: dict, keywords: set[s
 
     if extracted:
         content = _select_passages(extracted, keywords)
-        return {**source, "content": content, "fetch_failed": False}
+        return {**source, "content": content, "fetch_failed": False, "fetch_method": "direct"}
 
     # --- Tentative 2: Jina Reader ---
     try:
@@ -105,15 +106,13 @@ async def _fetch_single(client: httpx.AsyncClient, source: dict, keywords: set[s
             headers={"Accept": "text/plain", "User-Agent": _USER_AGENT},
         )
         if jina_resp.status_code == 200 and len(jina_resp.text) > 100:
-            print(f"    \033[35m[FETCH]\033[0m \033[33m[JINA OK]\033[0m {url[:60]}")
             content = _select_passages(jina_resp.text[:2500], keywords)
-            return {**source, "content": content, "fetch_failed": False}
+            return {**source, "content": content, "fetch_failed": False, "fetch_method": "jina"}
     except Exception:
         pass
 
     # --- Tentative 3: snippet Brave (dernier recours) ---
-    print(f"    \033[35m[FETCH]\033[0m \033[31m[SNIPPET FALLBACK]\033[0m {url[:60]}")
-    return {**source, "content": source.get("snippet", ""), "fetch_failed": True}
+    return {**source, "content": source.get("snippet", ""), "fetch_failed": True, "fetch_method": "snippet"}
 
 
 async def fetch_and_extract(sources: list[dict], idea: str, queries: list[str]) -> tuple[list[dict], dict]:
@@ -132,13 +131,14 @@ async def fetch_and_extract(sources: list[dict], idea: str, queries: list[str]) 
         results = await asyncio.gather(*tasks)
 
     duration = time.perf_counter() - t0
-    fetched_ok = sum(1 for r in results if not r.get("fetch_failed"))
-    print(f"    \033[35m[FETCH]\033[0m {len(sources)} URLs → {fetched_ok} fetched OK, {len(sources) - fetched_ok} failed ({duration:.2f}s)")
+    n_direct = sum(1 for r in results if r.get("fetch_method") == "direct")
+    n_jina = sum(1 for r in results if r.get("fetch_method") == "jina")
+    n_failed = sum(1 for r in results if r.get("fetch_failed"))
+    print(f"    \033[35m[FETCH]\033[0m {len(sources)} URLs → {n_direct} direct, {n_jina} via Jina, {n_failed} failed ({duration:.2f}s)")
     for r in results:
-        if r.get("fetch_failed"):
-            print(f"      \033[2m[FALLBACK] {len(r.get('content', ''))} chars — {r['url']}\033[0m")
-        else:
-            print(f"      \033[32m[OK]\033[0m {len(r.get('content', ''))} chars — {r['url']}")
+        parsed = urlparse(r["url"])
+        short_url = parsed.hostname.replace("www.", "") + parsed.path[:40]
+        print(f"      \033[2m{len(r.get('content', '')):>5}c — {short_url}\033[0m")
 
     failed_urls = [r["url"] for r in results if r.get("fetch_failed")]
     metrics = {"duration": duration}

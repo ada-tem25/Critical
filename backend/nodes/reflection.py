@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
+from llm_retry import llm_call_with_retry
 
 load_dotenv()
 
@@ -83,10 +84,13 @@ async def reflect(claim_idea: str, claim_type: str, child_results: list[dict], p
     structured_llm = llm.with_structured_output(ReflectionOutput, include_raw=True)
 
     t0 = time.perf_counter()
-    raw_response = await structured_llm.ainvoke([
-        SystemMessage(content=REFLECTION_PROMPT),
-        HumanMessage(content=context_json),
-    ])
+    raw_response = await llm_call_with_retry(
+        lambda: structured_llm.ainvoke([
+            SystemMessage(content=REFLECTION_PROMPT),
+            HumanMessage(content=context_json),
+        ]),
+        agent_name="REFLECTION",
+    )
     duration = time.perf_counter() - t0
 
     usage = raw_response["raw"].usage_metadata

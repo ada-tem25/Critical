@@ -89,25 +89,11 @@ def _build_child_results(claim: Claim, results: dict[int, AnalyzedClaim], all_cl
     return child_results
 
 
-_semaphore = asyncio.Semaphore(3)
-
 async def _analyze_claim(claim: Claim, child_results: list[dict], country: str) -> tuple[AnalyzedClaim, dict]:
-    """Sends a claim through the Analysis Workflow with rate-limit protection.
-    Returns (AnalyzedClaim, metrics)."""
-    async with _semaphore:
-        print(f"    \033[1m→ Analyzing #{claim.id} [{claim.verifiability}/{claim.type}]\033[0m with {len(child_results)} child results")
-        for attempt in range(3):
-            try:
-                return await run_analysis(claim, child_results, country)
-            except Exception as e:
-                if "rate" in str(e).lower() or "429" in str(e):
-                    wait = 2 ** attempt
-                    print(f"    \033[33m[ORCHESTRATOR] Rate limited on #{claim.id}, retry in {wait}s (attempt {attempt + 1}/3)\033[0m")
-                    await asyncio.sleep(wait)
-                else:
-                    raise
-        # Last try without catching
-        return await run_analysis(claim, child_results, country)
+    """Sends a claim through the Analysis Workflow.
+    Rate-limit retry is handled by each LLM agent individually."""
+    print(f"    \033[1m→ Analyzing #{claim.id} [{claim.verifiability}/{claim.type}]\033[0m with {len(child_results)} child results")
+    return await run_analysis(claim, child_results, country)
 
 
 async def orchestrate(claims: list[Claim], country: str = "INT") -> tuple[list[AnalyzedClaim], dict]:
@@ -153,17 +139,21 @@ async def orchestrate(claims: list[Claim], country: str = "INT") -> tuple[list[A
     for i, level_claims in enumerate(levels):
         print(f"\n\033[1m[ORCHESTRATOR] === Executing level {i} ({len(level_claims)} claims) ===\033[0m")
 
-        tasks = []
+        # === MODE PARALLÈLE (commenté — réactiver avec plus grosses rate limits) ===
+        # tasks = []
+        # for c in level_claims:
+        #     child_results = _build_child_results(c, results, all_claims_for_lookup)
+        #     tasks.append(_analyze_claim(c, child_results, country))
+        # level_results = await asyncio.gather(*tasks)
+        # for analyzed_claim, _metrics in level_results:
+        #     results[analyzed_claim.claim_id] = analyzed_claim
+        #     all_passes.extend(_metrics.get("passes", []))
+        #     print(f"    \033[32m✓ #{analyzed_claim.claim_id}\033[0m")
 
+        # === MODE SÉQUENTIEL (actif) ===
         for c in level_claims:
             child_results = _build_child_results(c, results, all_claims_for_lookup)
-            tasks.append(_analyze_claim(c, child_results, country))
-
-        # Run all tasks for this level in parallel
-        level_results = await asyncio.gather(*tasks)
-
-        # Collect results
-        for analyzed_claim, _metrics in level_results:
+            analyzed_claim, _metrics = await _analyze_claim(c, child_results, country)
             results[analyzed_claim.claim_id] = analyzed_claim
             all_passes.extend(_metrics.get("passes", []))
             print(f"    \033[32m✓ #{analyzed_claim.claim_id}\033[0m")

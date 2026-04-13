@@ -10,17 +10,11 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from models import Claim, AnalyzedClaim
 from nodes.generate_queries import generate_queries_l2
-# from nodes.web_research import search_and_tag  # ANCIEN — gardé pour rollback
 from nodes.synthesizer import synthesize
 from nodes.brave_search import brave_search
 from nodes.rank_and_select import rank_and_select
 from nodes.fetch_extract import fetch_and_extract
 from nodes.reflection import reflect
-from domain_registry import get_domains
-from utils import get_categories_for_type
-
-
-EU_MEMBERS = {"FR", "DE", "ES", "IT", "NL", "BE", "AT", "PT", "IE", "FI", "SE", "DK", "PL", "CZ", "GR", "RO", "BG", "HR", "HU", "SK", "SI", "LT", "LV", "EE", "CY", "MT", "LU"}
 
 
 # =================== Internal State ===========================================
@@ -39,7 +33,7 @@ class AnalysisState(TypedDict, total=False):
 
     # L2 intermediate fields
     queries_l2: list[str]
-    search_results: list[dict]  # Tagged sources from Tavily (ANCIEN) or extracted passages (NOUVEAU)
+    search_results: list[dict]
     summary: str
     needs_level3: bool
 
@@ -76,35 +70,6 @@ async def generate_queries(state: AnalysisState) -> dict:
         country=state.get("country", "INT"),
     )
     return {"queries_l2": queries, "passes": state.get("passes", []) + metrics.get("passes", [])}
-
-
-# === ANCIEN NODE web_research (Tavily) — commenté pour rollback rapide ===
-# async def web_research(state: AnalysisState) -> dict:
-#     """Executes Tavily search and tags results by domain tier."""
-#     from utils import get_tavily_country
-#
-#     #Regions filtering (for the allowed web domains)
-#     country = state.get("country", "INT")
-#     if get_tavily_country(country) is None:
-#         regions = None
-#     else:
-#         regions = [country, "INT"]
-#         if country in EU_MEMBERS:
-#             regions.append("EU")
-#     print(regions)
-#
-#     #Categories filtering
-#     filtered_categories = get_categories_for_type(state.get("type", ""))
-#
-#     tagged_sources, metrics = await search_and_tag(
-#         claim_id=state["claim_id"],
-#         reliabilities=["reference", "established"],
-#         categories=filtered_categories,
-#         regions=regions,
-#         queries=state.get("queries_l2", []),
-#         country=country,
-#     )
-#     return {"search_results": tagged_sources}
 
 
 async def brave_search_node(state: AnalysisState) -> dict:
@@ -275,12 +240,6 @@ def _build_graph() -> StateGraph:
     graph.add_edge("fetch_extract", "reflection")
     graph.add_conditional_edges("reflection", route_after_reflection)
     graph.add_edge("synthesizer", END)
-
-    # === ANCIEN WIRING L2 (Tavily) — commenté pour rollback rapide ===
-    # graph.add_node("web_research", web_research)
-    # graph.add_edge("generate_queries", "web_research")
-    # graph.add_edge("web_research", "synthesizer")
-    # graph.add_edge("synthesizer", END)
 
     # D branch #TODO
     graph.add_edge("level3_placeholder", END)
