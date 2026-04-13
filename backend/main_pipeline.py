@@ -36,7 +36,7 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
             all_metrics["decomposer"] = decomposer_metrics
 
         t0 = time.perf_counter()
-        analyzed, orchestrator_metrics = await orchestrate(claims, country)
+        analyzed, orchestrator_metrics = await orchestrate(claims, country, mode=mode)
         all_metrics["orchestrator"] = {"duration": time.perf_counter() - t0, "passes": orchestrator_metrics.get("passes", [])}
         return analyzed
 

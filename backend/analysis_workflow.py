@@ -42,7 +42,8 @@ class AnalysisState(TypedDict, total=False):
     selected_sources: list[dict]     # Top sources after ranking (current iteration)
     extracted_passages: list[dict]   # Extracted passages, cumulative across iterations
     failed_urls: list[str]           # URLs that returned 403/error, excluded from future ranking
-    loop_count: int                  # Reflection loop counter, init 0, max 2
+    loop_count: int                  # Reflection loop counter, init 0
+    max_loops: int                   # Max reflection loops: 1 (eco) or 2 (perf)
     sufficient: bool                 # Reflection output
 
     # L3 intermediate fields
@@ -194,9 +195,6 @@ def route_by_verifiability(state: AnalysisState) -> str:
         return "level3_placeholder"
 
 
-MAX_RESEARCH_LOOPS = 1  # Max reflection loop iterations (increase later if needed)
-
-
 def route_after_ranking(state: AnalysisState) -> str:
     """After ranking: skip to synthesizer if no new URLs to fetch."""
     selected_urls = {s["url"] for s in state.get("selected_sources", [])}
@@ -209,9 +207,20 @@ def route_after_ranking(state: AnalysisState) -> str:
     return "fetch_extract"
 
 
+def route_after_fetch(state: AnalysisState) -> str:
+    """After fetch: skip reflection on last allowed loop to save tokens."""
+    loop_count = state.get("loop_count", 0)
+    max_loops = state.get("max_loops", 1)
+    if loop_count >= max_loops:
+        print(f"    \033[2m[ROUTER] loop {loop_count} >= max_loops {max_loops} — skipping reflection\033[0m")
+        return "synthesizer"
+    return "reflection"
+
+
 def route_after_reflection(state: AnalysisState) -> str:
     """After reflection: route to synthesizer if sufficient or max loops, else loop back."""
-    if state.get("sufficient") or state.get("loop_count", 0) > MAX_RESEARCH_LOOPS:
+    max_loops = state.get("max_loops", 1)
+    if state.get("sufficient") or state.get("loop_count", 0) > max_loops:
         return "synthesizer"
     return "brave_search"
 
@@ -233,11 +242,11 @@ def _build_graph() -> StateGraph:
     # Entry: conditional edge from START
     graph.add_conditional_edges(START, route_by_verifiability)
 
-    # L2 fact-checking loop (NOUVEAU — Brave + fetch + reflection loop)
+    # L2 fact-checking loop (Brave + fetch + reflection loop)
     graph.add_edge("generate_queries", "brave_search")
     graph.add_edge("brave_search", "rank_and_select")
     graph.add_conditional_edges("rank_and_select", route_after_ranking)
-    graph.add_edge("fetch_extract", "reflection")
+    graph.add_conditional_edges("fetch_extract", route_after_fetch)
     graph.add_conditional_edges("reflection", route_after_reflection)
     graph.add_edge("synthesizer", END)
 
@@ -253,7 +262,7 @@ workflow = _build_graph().compile()
 
 # =================== Entry point ==============================================
 
-async def run_analysis(claim: Claim, child_results: list[dict], country: str = "INT") -> tuple[AnalyzedClaim, dict]:
+async def run_analysis(claim: Claim, child_results: list[dict], country: str = "INT", mode: str = "eco") -> tuple[AnalyzedClaim, dict]:
     """Runs the analysis workflow for a single claim.
     Takes a Claim + child_results + country, returns (AnalyzedClaim, metrics)."""
 
@@ -269,6 +278,7 @@ async def run_analysis(claim: Claim, child_results: list[dict], country: str = "
         "country": country,
         "passes": [],
         "loop_count": 0,
+        "max_loops": 1 if mode == "eco" else 2,
     }
 
     result = await workflow.ainvoke(state)

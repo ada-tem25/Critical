@@ -5,7 +5,6 @@ No LLM. Uses Trafilatura for content extraction + keyword paragraph selection.
 import asyncio
 import re
 import time
-from urllib.parse import urlparse
 import httpx
 import trafilatura
 from trafilatura.settings import use_config
@@ -71,6 +70,25 @@ def _select_passages(text: str, keywords: set[str], max_chars: int = MAX_CHARS_P
     return "\n\n".join(selected)
 
 
+def _is_boilerplate(text: str) -> bool:
+    """Returns True if >50% of non-empty lines are shorter than 40 chars (nav/menu/footer)."""
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines:
+        return True
+    short_lines = sum(1 for line in lines if len(line.strip()) < 40)
+    return short_lines / len(lines) > 0.5
+
+
+def _passage_preview(text: str) -> str:
+    """Returns first 3 words ... last 3 words of text."""
+    words = text.split()
+    if not words:
+        return "(no content)"
+    if len(words) <= 6:
+        return " ".join(words)
+    return f"{' '.join(words[:3])} ... {' '.join(words[-3:])}"
+
+
 async def _fetch_single(client: httpx.AsyncClient, source: dict, keywords: set[str]) -> dict:
     """Fetch a single URL and extract relevant passages.
     Cascade: httpx+Trafilatura → Jina Reader → Brave snippet."""
@@ -91,8 +109,10 @@ async def _fetch_single(client: httpx.AsyncClient, source: dict, keywords: set[s
             )
         except Exception as e:
             print(f"    \033[35m[FETCH]\033[0m \033[31mTrafilatura failed {url[:60]}: {e}\033[0m")
+    except httpx.HTTPStatusError as e:
+        print(f"    \033[35m[FETCH]\033[0m \033[31m{e.response.status_code} Error {url}\033[0m")
     except Exception as e:
-        print(f"    \033[35m[FETCH]\033[0m \033[31mFailed {url[:60]}: {e}\033[0m")
+        print(f"    \033[35m[FETCH]\033[0m \033[31mFailed {url}: {type(e).__name__}\033[0m")
 
     if extracted:
         content = _select_passages(extracted, keywords)
@@ -106,8 +126,13 @@ async def _fetch_single(client: httpx.AsyncClient, source: dict, keywords: set[s
             headers={"Accept": "text/plain", "User-Agent": _USER_AGENT},
         )
         if jina_resp.status_code == 200 and len(jina_resp.text) > 100:
-            content = _select_passages(jina_resp.text[:2500], keywords)
-            return {**source, "content": content, "fetch_failed": False, "fetch_method": "jina"}
+            text = jina_resp.text[:2500]
+            if len(text) < 800 or _is_boilerplate(text):
+                print(f"    \033[35m[FETCH]\033[0m \033[2mJina boilerplate ({len(text)}c) {url}\033[0m")
+                print(f"      \033[2m{text[:200]}...\033[0m") #Si l'output Jina c'est du bruit, on va fallback sur la tentative 3, et ça ajoute la mauvaise url à la blacklist
+            else:
+                content = _select_passages(text, keywords)
+                return {**source, "content": content, "fetch_failed": False, "fetch_method": "jina"}
     except Exception:
         pass
 
@@ -136,9 +161,11 @@ async def fetch_and_extract(sources: list[dict], idea: str, queries: list[str]) 
     n_failed = sum(1 for r in results if r.get("fetch_failed"))
     print(f"    \033[35m[FETCH]\033[0m {len(sources)} URLs → {n_direct} direct, {n_jina} via Jina, {n_failed} failed ({duration:.2f}s)")
     for r in results:
-        parsed = urlparse(r["url"])
-        short_url = parsed.hostname.replace("www.", "") + parsed.path[:40]
-        print(f"      \033[2m{len(r.get('content', '')):>5}c — {short_url}\033[0m")
+        chars = len(r.get("content", ""))
+        rel = r.get("reliability", "?")
+        cat = r.get("category", "?")
+        preview = _passage_preview(r.get("content", ""))
+        print(f'      \033[2m{chars:>5}c [{rel}/{cat}] {r["url"]} — "{preview}"\033[0m')
 
     failed_urls = [r["url"] for r in results if r.get("fetch_failed")]
     metrics = {"duration": duration}
