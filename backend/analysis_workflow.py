@@ -114,7 +114,7 @@ async def fetch_extract_node(state: AnalysisState) -> dict:
     # Cumulate with previous iterations, dedup by URL
     prev_passages = state.get("extracted_passages", [])
     seen_urls = {p["url"] for p in prev_passages}
-    new_passages = [p for p in extracted if p["url"] not in seen_urls]
+    new_passages = [p for p in extracted if p["url"] not in seen_urls and not p.get("fetch_failed")]
 
     # Accumulate failed URLs
     prev_failed = state.get("failed_urls", [])

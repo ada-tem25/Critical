@@ -38,7 +38,7 @@ async def reflect(claim_idea: str, claim_type: str, child_results: list[dict], p
                 "url": p.get("url", ""),
                 "title": p.get("title", ""),
                 "reliability": p.get("reliability", "unknown"),
-                "content": p.get("content", "")[:3500],  # Cap per passage for token budget
+                "content": p.get("content", "")[:4000],  # Cap per passage for token budget
             }
             for p in passages if p.get("content")
         ],

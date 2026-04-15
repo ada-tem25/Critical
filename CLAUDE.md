@@ -95,11 +95,31 @@ Generate Queries L2
 │   Receives child_results in its prompt context.
 │
 ▼
-Tavily Search + Domain Tagger (deterministic, no LLM)
-│   Executes queries via Tavily API.
-│   Tags each result by checking domain against a Python whitelist:
-│   tier_1 (institutional), tier_2 (quality media), biased (with bias tag), unknown (discarded).
-│   Passes all tagged sources (reliable + biased) to the Synthesizer.
+Brave Search + Domain Tagger (deterministic, no LLM)
+│   Executes queries via Brave Search API.
+│   Deduplicates by URL, tags each result by checking domain against
+│   a curated registry (~400+ sources) with reliability, category,
+│   region, and bias fields.
+│
+▼
+Rank & Select (deterministic, no LLM)
+│   Scores sources: reliability_weight × 0.6 + snippet_relevance × 0.4.
+│   Prioritizes tiered (non-unknown) sources, fills remaining slots
+│   with best unknowns. 
+│
+▼
+Fetch & Extract (deterministic, no LLM)
+│   Fetches each page with a 4-level cascade:
+│   1. httpx + Trafilatura (direct fetch + content extraction)
+│   2. Jina Reader (r.jina.ai fallback)
+│   3. Google Cache (webcache.googleusercontent.com fallback)
+│   4. Fail → URL blacklisted, Brave snippet discarded
+│
+▼
+Reflection (LLM agent — Haiku)
+│   Evaluates if enough material was gathered.
+│   If insufficient, generates 1-2 follow-up queries for another loop.
+│   Max loops: 1 (eco) / 2 (perf).
 │
 ▼
 Synthesizer
@@ -313,7 +333,13 @@ D/interpretive (with or without substantive sources):
 
 **Generate Queries (L3 — interpretive mode)** — Generates queries oriented toward academic and intellectual contextualization: books, essays, cultural studies, political science or sociology analyses that address the same phenomenon. Does NOT search for counter-arguments or political positions.
 
-**Tavily Search + Domain Tagger** — Deterministic step (no LLM). Executes queries via Tavily API, deduplicates results by URL, and tags each source by checking its domain against a Python whitelist: tier_1 (institutional), tier_2 (quality media), biased (with bias tag). Unknown domains are discarded. All tagged sources are passed to the Synthesizer.
+**Brave Search + Domain Tagger** — Deterministic step (no LLM). Executes queries via Brave Search API, deduplicates results by URL, and tags each source via a curated domain registry (~400+ sources) with reliability (reference/established/oriented/unknown), category, region, and bias fields.
+
+**Rank & Select** — Deterministic step (no LLM). Scores sources by reliability_weight × 0.6 + snippet_relevance × 0.4. Prioritizes tiered sources, fills with best unknowns. Selects 4-6 per iteration. Excludes previously failed URLs.
+
+**Fetch & Extract** — Deterministic step (no LLM). 4-level fetch cascade: (1) httpx + Trafilatura, (2) Jina Reader, (3) Google Cache, (4) fail — URL blacklisted, snippet discarded. Boilerplate detection catches JS-only pages and nav noise. Failed sources are NOT forwarded to agents.
+
+**Reflection** — LLM agent (Haiku). Evaluates if extracted passages are sufficient for synthesis. If not, generates 1-2 follow-up queries for another research loop. Max loops: 1 (eco) / 2 (perf).
 
 **Synthesizer** — Produces an analysis of the solidity of the author's argument for this claim, based on the tagged sources and the child_results. Weighs source reliability based on tier/bias tags. Determines via the `needs_level3` field whether the claim requires deeper critical analysis (diverging sources, gray zone topic).
 

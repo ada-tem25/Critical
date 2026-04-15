@@ -11,7 +11,7 @@ from trafilatura.settings import use_config
 
 
 # Max characters per source (~800 tokens ≈ 3200 chars)
-MAX_CHARS_PER_SOURCE = 3500
+MAX_CHARS_PER_SOURCE = 4000
 
 # Browser User-Agent to avoid basic 403 bot-blocking
 _USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -71,11 +71,33 @@ def _select_passages(text: str, keywords: set[str], max_chars: int = MAX_CHARS_P
 
 
 def _is_boilerplate(text: str) -> bool:
-    """Returns True if >50% of non-empty lines are shorter than 40 chars (nav/menu/footer)."""
-    lines = [line for line in text.splitlines() if line.strip()]
+    """Returns True if text is boilerplate: JS-only page, nav/menu/footer noise, etc."""
+    
+    # Signatures connues de pages JS-only / anti-bot
+    js_signatures = [
+        "javascript is disabled",
+        "this website requires",
+        "just a moment",
+        "enable javascript",
+        "please enable cookies",
+        "checking your browser",
+        "please turn javascript on",
+        "needs javascript to work",
+        "activate javascript",
+        "browser verification",
+        "verifying you are human",
+        "access denied",
+        "ray id",
+    ]
+    lower = text.lower()
+    if any(sig in lower for sig in js_signatures):
+        return True
+
+    # >50% de lignes courtes → nav/menu/footer
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
     if not lines:
         return True
-    short_lines = sum(1 for line in lines if len(line.strip()) < 40)
+    short_lines = sum(1 for line in lines if len(line) < 40)
     return short_lines / len(lines) > 0.5
 
 
@@ -126,17 +148,41 @@ async def _fetch_single(client: httpx.AsyncClient, source: dict, keywords: set[s
             headers={"Accept": "text/plain", "User-Agent": _USER_AGENT},
         )
         if jina_resp.status_code == 200 and len(jina_resp.text) > 100:
-            text = jina_resp.text[:2500]
-            if len(text) < 800 or _is_boilerplate(text):
+            text = jina_resp.text[:MAX_CHARS_PER_SOURCE]
+            if len(text) < 400 or _is_boilerplate(text):
                 print(f"    \033[35m[FETCH]\033[0m \033[2mJina boilerplate ({len(text)}c) {url}\033[0m")
-                print(f"      \033[2m{text[:200]}...\033[0m") #Si l'output Jina c'est du bruit, on va fallback sur la tentative 3, et ça ajoute la mauvaise url à la blacklist
+                #Si l'output Jina c'est du bruit, on va fallback sur la tentative 3, et ça ajoute la mauvaise url à la blacklist
             else:
                 content = _select_passages(text, keywords)
                 return {**source, "content": content, "fetch_failed": False, "fetch_method": "jina"}
     except Exception:
         pass
 
-    # --- Tentative 3: snippet Brave (dernier recours) ---
+    # --- Tentative 3: Google Cache ---
+    try:
+        cache_url = f"https://webcache.googleusercontent.com/search?q=cache:{url}"
+        cache_resp = await client.get(
+            cache_url, timeout=8.0, follow_redirects=True,
+            headers={"User-Agent": _USER_AGENT},
+        )
+        if cache_resp.status_code == 200:
+            cache_html = cache_resp.text
+            cache_text = await asyncio.to_thread(
+                trafilatura.extract, cache_html,
+                include_comments=False,
+                include_tables=True,
+                config=_TRAF_CONFIG,
+            )
+            if cache_text and len(cache_text) > 500 and not _is_boilerplate(cache_text):
+                print(f"    \033[35m[FETCH]\033[0m \033[32mGoogle Cache hit {url[:60]}\033[0m")
+                content = _select_passages(cache_text, keywords)
+                return {**source, "content": content, "fetch_failed": False, "fetch_method": "google_cache"}
+            else:
+                print(f"    \033[35m[FETCH]\033[0m \033[2mGoogle Cache empty/boilerplate {url[:60]}\033[0m")
+    except Exception:
+        pass
+
+    # --- Tentative 4: snippet Brave (dernier recours) ---
     return {**source, "content": source.get("snippet", ""), "fetch_failed": True, "fetch_method": "snippet"}
 
 
@@ -158,8 +204,9 @@ async def fetch_and_extract(sources: list[dict], idea: str, queries: list[str]) 
     duration = time.perf_counter() - t0
     n_direct = sum(1 for r in results if r.get("fetch_method") == "direct")
     n_jina = sum(1 for r in results if r.get("fetch_method") == "jina")
+    n_cache = sum(1 for r in results if r.get("fetch_method") == "google_cache")
     n_failed = sum(1 for r in results if r.get("fetch_failed"))
-    print(f"    \033[35m[FETCH]\033[0m {len(sources)} URLs → {n_direct} direct, {n_jina} via Jina, {n_failed} failed ({duration:.2f}s)")
+    print(f"    \033[35m[FETCH]\033[0m {len(sources)} URLs → {n_direct} direct, {n_jina} Jina, {n_cache} cache, {n_failed} failed ({duration:.2f}s)")
     for r in results:
         chars = len(r.get("content", ""))
         rel = r.get("reliability", "?")
