@@ -7,7 +7,7 @@ import time
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
-from prompts.queries import generate_queries_l2_instructions, generate_queries_l3_instructions
+from prompts.queries import generate_queries_l2_instructions, generate_queries_l3_instructions, generate_queries_l4_instructions
 from llm_retry import llm_call_with_retry
 
 load_dotenv()
@@ -19,6 +19,7 @@ llm = ChatAnthropic(model=GENERATE_QUERIES_MODEL, temperature=0)
 _INSTRUCTIONS = {
     "l2": generate_queries_l2_instructions,
     "l3": generate_queries_l3_instructions,
+    "l4": generate_queries_l4_instructions,
 }
 
 def _parse_queries(content: str, fallback_idea: str) -> list[str]: #This functions prevents the use of the with_structured_output tool, gaining 600 tokens per call.
@@ -34,12 +35,12 @@ def _parse_queries(content: str, fallback_idea: str) -> list[str]: #This functio
     return [fallback_idea]
 
 
-async def generate_queries(claim_id: int, idea: str, claim_type: str, child_results: list[dict], country: str = "INT", l2_summary: str = "", analysis_level: str = "l2") -> tuple[list[str], dict]:
+async def generate_queries(claim_id: int, idea: str, claim_type: str, child_results: list[dict], country: str = "INT", previous_summary: str = "", analysis_level: str = "l2") -> tuple[list[str], dict]:
     """LLM agent. Generates 1-3 search queries for a claim.
-    analysis_level: "l2" or "l3" — selects the prompt instructions.
+    analysis_level: "l2", "l3", or "l4" — selects the prompt instructions.
     Returns (queries, metrics)."""
 
-    label = f"GENERATE QUERIES" if analysis_level == "l2" else f"GENERATE QUERIES L3"
+    label = "GENERATE QUERIES" if analysis_level == "l2" else f"GENERATE QUERIES {analysis_level.upper()}"
     instructions = _INSTRUCTIONS[analysis_level]
 
     claim_context = {
@@ -48,8 +49,8 @@ async def generate_queries(claim_id: int, idea: str, claim_type: str, child_resu
         "child_results": child_results,
         "country": country,
     }
-    if analysis_level == "l3" and l2_summary:
-        claim_context["l2_summary"] = l2_summary
+    if analysis_level != "l2" and previous_summary:
+        claim_context["previous_summary"] = previous_summary
 
     t0 = time.perf_counter()
     response = await llm_call_with_retry(

@@ -59,3 +59,5 @@ Return a JSON object with:
 - `follow_up_queries`: list of 1-2 query strings (only if insufficient).
 
 """
+
+reflection_l4_instructions = ""

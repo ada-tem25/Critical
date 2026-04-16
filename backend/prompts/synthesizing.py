@@ -42,6 +42,8 @@ Return a JSON object with:
 - `needs_next_level`: boolean.
 """
 
+synthesizer_l4_instructions = ""
+
 synthesizer_l3_instructions = """
 
 You produce the Level 3 political analysis of a claim. Your role is NOT to evaluate whether the author is right or wrong (that was Level 2's job). Your role is to BROADEN THE PERSPECTIVE so the reader understands the political and intellectual stakes beyond the author's framing.

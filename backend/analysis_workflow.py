@@ -57,6 +57,17 @@ class AnalysisState(TypedDict, total=False):
     l3_sufficient: bool
     analysis: str
 
+    # L4 loop fields
+    queries_l4: list[str]
+    all_search_results_l4: list[dict]
+    selected_sources_l4: list[dict]
+    extracted_passages_l4: list[dict]
+    failed_urls_l4: list[str]
+    l4_loop_count: int
+    l4_max_loops: int
+    l4_sufficient: bool
+    recommended_reading: list[dict]
+
     # Final output
     analyzed: bool
     sources: list[dict]
@@ -194,7 +205,7 @@ async def generate_queries_l3_node(state: AnalysisState) -> dict:
         claim_type=state.get("type", ""),
         child_results=state.get("child_results", []),
         country=state.get("country", "INT"),
-        l2_summary=state.get("summary", ""),
+        previous_summary=state.get("summary", ""),
         analysis_level="l3",
     )
     return {"queries_l3": queries, "passes": state.get("passes", []) + metrics.get("passes", [])}
@@ -286,7 +297,7 @@ async def synthesizer_l3_node(state: AnalysisState) -> dict:
         claim_type=state.get("type", ""),
         child_results=state.get("child_results", []),
         sources=passages,
-        l2_summary=state.get("summary", ""),
+        previous_summary=state.get("summary", ""),
         analysis_level="l3",
     )
 
@@ -303,12 +314,131 @@ async def synthesizer_l3_node(state: AnalysisState) -> dict:
     }
 
 
-# =================== L4 Placeholder ==========================================
+# =================== L4 Nodes (Intellectual Contextualization) ================
 
-def level4_placeholder(state: AnalysisState) -> dict:
-    """Placeholder for Level 4 interpretive analysis (not yet implemented)."""
-    print(f"    [L4] Claim #{state['claim_id']} routed to Level 4 (not yet implemented)")
-    return {}
+async def generate_queries_l4_node(state: AnalysisState) -> dict:
+    """Generates 1-3 search queries for L4 intellectual contextualization."""
+    queries, metrics = await generate_queries(
+        claim_id=state["claim_id"],
+        idea=state["idea"],
+        claim_type=state.get("type", ""),
+        child_results=state.get("child_results", []),
+        country=state.get("country", "INT"),
+        previous_summary=state.get("analysis", ""),  # L3 analysis if coming from D/opinion → L3 → L4
+        analysis_level="l4",
+    )
+    return {"queries_l4": queries, "passes": state.get("passes", []) + metrics.get("passes", [])}
+
+
+async def brave_search_l4_node(state: AnalysisState) -> dict:
+    """Executes Brave search for L4 queries, cumulates results."""
+    queries = state.get("queries_l4", [])
+    country = state.get("country", "INT")
+
+    results, metrics = await brave_search(queries, country)
+
+    prev = state.get("all_search_results_l4", [])
+    seen = {r["url"] for r in prev}
+    new = [r for r in results if r["url"] not in seen]
+
+    return {
+        "all_search_results_l4": prev + new,
+        "passes": state.get("passes", []) + metrics.get("passes", []),
+    }
+
+
+async def rank_select_l4_node(state: AnalysisState) -> dict:
+    """Ranks and selects top sources from L4 search results."""
+    results = state.get("all_search_results_l4", [])
+    idea = state.get("idea", "")
+    queries = state.get("queries_l4", [])
+    excluded = set(state.get("failed_urls_l4", []))
+
+    selected = rank_and_select(results, idea, queries, excluded_urls=excluded)
+    return {"selected_sources_l4": selected}
+
+
+async def fetch_extract_l4_node(state: AnalysisState) -> dict:
+    """Fetches pages and extracts relevant passages for L4, cumulates."""
+    sources = state.get("selected_sources_l4", [])
+    idea = state.get("idea", "")
+    queries = state.get("queries_l4", [])
+
+    extracted, metrics, new_failed = await fetch_and_extract(sources, idea, queries)
+
+    prev = state.get("extracted_passages_l4", [])
+    seen = {p["url"] for p in prev}
+    new = [p for p in extracted if p["url"] not in seen and not p.get("fetch_failed")]
+    prev_failed = state.get("failed_urls_l4", [])
+
+    return {
+        "extracted_passages_l4": prev + new,
+        "failed_urls_l4": prev_failed + new_failed,
+    }
+
+
+async def reflection_l4_node(state: AnalysisState) -> dict:
+    """Evaluates if L4 passages are sufficient, or need another research loop."""
+    passages = state.get("extracted_passages_l4", [])
+    loop_count = state.get("l4_loop_count", 0)
+
+    result, metrics = await reflect(
+        claim_idea=state.get("idea", ""),
+        claim_type=state.get("type", ""),
+        child_results=state.get("child_results", []),
+        passages=passages,
+        loop_count=loop_count,
+        analysis_level="l4",
+    )
+
+    update = {
+        "l4_loop_count": loop_count + 1,
+        "l4_sufficient": result["sufficient"],
+        "passes": state.get("passes", []) + metrics.get("passes", []),
+    }
+
+    if not result["sufficient"] and result.get("follow_up_queries"):
+        update["queries_l4"] = result["follow_up_queries"]
+
+    return update
+
+
+async def synthesizer_l4_node(state: AnalysisState) -> dict:
+    """Produces L4 intellectual contextualization based on sources."""
+
+    passages = state.get("extracted_passages_l4", [])
+    for i, p in enumerate(passages):
+        p["id"] = i + 1
+
+    result, metrics = await synthesize(
+        claim_id=state["claim_id"],
+        idea=state["idea"],
+        claim_type=state.get("type", ""),
+        child_results=state.get("child_results", []),
+        sources=passages,
+        previous_summary=state.get("analysis", ""),  # L3 analysis if coming from D/opinion → L3 → L4
+        analysis_level="l4",
+    )
+
+    # Merge previous sources with L4 cited sources
+    prev_sources = state.get("sources", [])
+    l4_sources = result["sources"]
+
+    # L4 can set analyzed=false if no substantive sources found
+    has_substance = bool(result["summary"].strip())
+
+    update = {
+        "recommended_reading": result.get("recommended_reading", []),
+        "sources": prev_sources + l4_sources,
+        "analyzed": has_substance,
+        "passes": state.get("passes", []) + metrics.get("passes", []),
+    }
+
+    # For D/interpretive entering L4 directly (no L2/L3), write summary
+    if not state.get("summary") and not state.get("analysis"):
+        update["summary"] = result["summary"]
+
+    return update
 
 
 # =================== Conditional edges ========================================
@@ -323,10 +453,10 @@ def route_by_verifiability(state: AnalysisState) -> str:
         if t == "opinion":
             return "generate_queries_l3"
         else:
-            return "level4_placeholder"
+            return "generate_queries_l4"
     else:
         print(f"    [ROUTER] WARNING: unexpected verifiability '{v}' for claim #{state.get('claim_id')}, skipping")
-        return "level4_placeholder"
+        return "generate_queries_l4"
 
 
 def route_after_ranking(state: AnalysisState) -> str:
@@ -397,6 +527,40 @@ def route_after_reflection_l3(state: AnalysisState) -> str:
     return "brave_search_l3"
 
 
+def route_after_synthesizer_l3(state: AnalysisState) -> str:
+    """After L3 synthesis: route to L4 if needs_next_level, else END."""
+    if state.get("needs_next_level"):
+        return "generate_queries_l4"
+    return END
+
+
+def route_after_ranking_l4(state: AnalysisState) -> str:
+    """After L4 ranking: skip to L4 synthesizer if no new URLs to fetch."""
+    selected = {s["url"] for s in state.get("selected_sources_l4", [])}
+    extracted = {p["url"] for p in state.get("extracted_passages_l4", [])}
+    failed = set(state.get("failed_urls_l4", []))
+    new = selected - extracted - failed
+    if len(new) == 0:
+        print(f"    [ROUTER] No new L4 URLs to fetch — skipping to synthesizer L4")
+        return "synthesizer_l4"
+    return "fetch_extract_l4"
+
+
+def route_after_fetch_l4(state: AnalysisState) -> str:
+    """After L4 fetch: skip reflection on last allowed loop."""
+    if state.get("l4_loop_count", 0) >= state.get("l4_max_loops", 0):
+        print(f"    \033[2m[ROUTER] L4 loop {state.get('l4_loop_count', 0)} >= max {state.get('l4_max_loops', 0)} — skipping reflection L4\033[0m")
+        return "synthesizer_l4"
+    return "reflection_l4"
+
+
+def route_after_reflection_l4(state: AnalysisState) -> str:
+    """After L4 reflection: loop or proceed to synthesis."""
+    if state.get("l4_sufficient") or state.get("l4_loop_count", 0) > state.get("l4_max_loops", 0):
+        return "synthesizer_l4"
+    return "brave_search_l4"
+
+
 # =================== Graph construction =======================================
 
 def _build_graph() -> StateGraph:
@@ -418,8 +582,13 @@ def _build_graph() -> StateGraph:
     graph.add_node("reflection_l3", reflection_l3_node)
     graph.add_node("synthesizer_l3", synthesizer_l3_node)
 
-    # L4 placeholder
-    graph.add_node("level4_placeholder", level4_placeholder)
+    # L4 nodes
+    graph.add_node("generate_queries_l4", generate_queries_l4_node)
+    graph.add_node("brave_search_l4", brave_search_l4_node)
+    graph.add_node("rank_select_l4", rank_select_l4_node)
+    graph.add_node("fetch_extract_l4", fetch_extract_l4_node)
+    graph.add_node("reflection_l4", reflection_l4_node)
+    graph.add_node("synthesizer_l4", synthesizer_l4_node)
 
     # Entry: conditional edge from START
     graph.add_conditional_edges(START, route_by_verifiability)
@@ -440,10 +609,17 @@ def _build_graph() -> StateGraph:
     graph.add_conditional_edges("rank_select_l3", route_after_ranking_l3)
     graph.add_conditional_edges("fetch_extract_l3", route_after_fetch_l3)
     graph.add_conditional_edges("reflection_l3", route_after_reflection_l3)
-    graph.add_edge("synthesizer_l3", END)
 
-    # L4 placeholder
-    graph.add_edge("level4_placeholder", END)
+    # L3 → L4 or END
+    graph.add_conditional_edges("synthesizer_l3", route_after_synthesizer_l3)
+
+    # L4 intellectual contextualization loop
+    graph.add_edge("generate_queries_l4", "brave_search_l4")
+    graph.add_edge("brave_search_l4", "rank_select_l4")
+    graph.add_conditional_edges("rank_select_l4", route_after_ranking_l4)
+    graph.add_conditional_edges("fetch_extract_l4", route_after_fetch_l4)
+    graph.add_conditional_edges("reflection_l4", route_after_reflection_l4)
+    graph.add_edge("synthesizer_l4", END)
 
     return graph
 
@@ -459,6 +635,14 @@ def _l3_max_loops(verifiability: str, mode: str) -> int:
     D/opinion enters L3 directly: full loop budget.
     C enters L3 via needs_next_level: no loop, just initial search pass."""
     if verifiability == "D":
+        return 1 if mode == "eco" else 2
+    return 0
+
+
+def _l4_max_loops(verifiability: str, claim_type: str, mode: str) -> int:
+    """D/interpretive enters L4 directly: full loop budget.
+    D/opinion enters L4 via L3 needs_next_level: no loop."""
+    if verifiability == "D" and claim_type != "opinion":
         return 1 if mode == "eco" else 2
     return 0
 
@@ -482,6 +666,8 @@ async def run_analysis(claim: Claim, child_results: list[dict], country: str = "
         "max_loops": 1 if mode == "eco" else 2,
         "l3_loop_count": 0,
         "l3_max_loops": _l3_max_loops(claim.verifiability or "", mode),
+        "l4_loop_count": 0,
+        "l4_max_loops": _l4_max_loops(claim.verifiability or "", claim.type or "", mode),
     }
 
     result = await workflow.ainvoke(state)
@@ -495,6 +681,7 @@ async def run_analysis(claim: Claim, child_results: list[dict], country: str = "
         supports=claim.supports,
         sources=[],  # TODO: convert result["sources"] to Source objects
         analysis=result.get("analysis"),
+        recommended_reading=result.get("recommended_reading", []),
     )
 
     metrics = {"passes": result.get("passes", [])}

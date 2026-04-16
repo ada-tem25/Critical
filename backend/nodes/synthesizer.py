@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
-from prompts.synthesizing import synthesizer_l2_instructions, synthesizer_l3_instructions
+from prompts.synthesizing import synthesizer_l2_instructions, synthesizer_l3_instructions, synthesizer_l4_instructions
 from llm_retry import llm_call_with_retry
 
 load_dotenv()
@@ -22,6 +22,7 @@ llm = ChatAnthropic(model=SYNTHESIZER_MODEL, temperature=0)
 _INSTRUCTIONS = {
     "l2": synthesizer_l2_instructions,
     "l3": synthesizer_l3_instructions,
+    "l4": synthesizer_l4_instructions,
 }
 
 
@@ -31,14 +32,15 @@ class SynthesizerOutput(BaseModel):
     idea: Optional[str] = Field(default=None, description="The claim idea — only included when needs_next_level is true.")
     claim_type: Optional[str] = Field(default=None, description="The claim type — only included when needs_next_level is true.")
     child_results: Optional[list[dict]] = Field(default=None, description="Child results — only included when needs_next_level is true.")
+    recommended_reading: Optional[list[dict]] = Field(default=None, description="Academic/intellectual references — only for L4.")
 
 
-async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: list[dict], sources: list[dict], l2_summary: str = "", analysis_level: str = "l2") -> tuple[dict, dict]:
+async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: list[dict], sources: list[dict], previous_summary: str = "", analysis_level: str = "l2") -> tuple[dict, dict]:
     """LLM agent. Analyzes the solidity of the author's argument based on sources.
-    analysis_level: "l2" or "l3" — selects the prompt instructions.
-    Returns ({summary, needs_next_level, sources, idea?, claim_type?, child_results?}, metrics)."""
+    analysis_level: "l2", "l3", or "l4" — selects the prompt instructions.
+    Returns ({summary, needs_next_level, sources, recommended_reading?, ...}, metrics)."""
 
-    label = "SYNTHESIZER" if analysis_level == "l2" else "SYNTHESIZER L3"
+    label = "SYNTHESIZER" if analysis_level == "l2" else f"SYNTHESIZER {analysis_level.upper()}"
     instructions = _INSTRUCTIONS[analysis_level]
 
     claim_context = {
@@ -47,8 +49,8 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
         "child_results": child_results,
         "sources": sources,
     }
-    if analysis_level == "l3" and l2_summary:
-        claim_context["l2_summary"] = l2_summary
+    if analysis_level != "l2" and previous_summary:
+        claim_context["previous_summary"] = previous_summary
 
     context_json = json.dumps(claim_context, ensure_ascii=False)
     print(f"    \033[34m[{label}]\033[0m #{claim_id} — {len(sources)} sources, {len(context_json)} chars total")
@@ -88,6 +90,8 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
             result["idea"] = idea
             result["claim_type"] = claim_type
             result["child_results"] = child_results
+        if parsed.recommended_reading:
+            result["recommended_reading"] = parsed.recommended_reading
 
     print(f"    \033[34m[{label}]\033[0m \033[2mTokens: {usage.get('input_tokens', 0)} in / {usage.get('output_tokens', 0)} out\033[0m")
 

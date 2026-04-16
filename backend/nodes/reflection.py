@@ -10,7 +10,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 from llm_retry import llm_call_with_retry
-from prompts.reflection import reflection_agent_instructions, reflection_l3_instructions
+from prompts.reflection import reflection_agent_instructions, reflection_l3_instructions, reflection_l4_instructions
 
 load_dotenv()
 
@@ -21,6 +21,7 @@ llm = ChatAnthropic(model=REFLECTION_MODEL, temperature=0)
 _INSTRUCTIONS = {
     "l2": reflection_agent_instructions,
     "l3": reflection_l3_instructions,
+    "l4": reflection_l4_instructions,
 }
 
 
@@ -31,10 +32,10 @@ class ReflectionOutput(BaseModel):
 
 async def reflect(claim_idea: str, claim_type: str, child_results: list[dict], passages: list[dict], loop_count: int, analysis_level: str = "l2") -> tuple[dict, dict]:
     """Evaluates if passages are sufficient for synthesis.
-    analysis_level: "l2" or "l3" — selects the prompt instructions.
+    analysis_level: "l2", "l3", or "l4" — selects the prompt instructions.
     Returns (reflection_result, metrics)."""
 
-    label = "REFLECTION" if analysis_level == "l2" else "REFLECTION L3"
+    label = "REFLECTION" if analysis_level == "l2" else f"REFLECTION {analysis_level.upper()}"
     instructions = _INSTRUCTIONS[analysis_level]
 
     context = {
