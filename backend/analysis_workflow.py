@@ -117,7 +117,8 @@ async def rank_select_node(state: AnalysisState) -> dict:
     queries = state.get("queries_l2", [])
     excluded = set(state.get("failed_urls", []))
 
-    selected = rank_and_select(results, idea, queries, excluded_urls=excluded)
+    claim_type = state.get("type", "")
+    selected = rank_and_select(results, idea, queries, claim_type=claim_type, excluded_urls=excluded)
     return {"selected_sources": selected}
 
 
@@ -235,7 +236,8 @@ async def rank_select_l3_node(state: AnalysisState) -> dict:
     queries = state.get("queries_l3", [])
     excluded = set(state.get("failed_urls_l3", []))
 
-    selected = rank_and_select(results, idea, queries, excluded_urls=excluded)
+    claim_type = state.get("type", "")
+    selected = rank_and_select(results, idea, queries, claim_type=claim_type, excluded_urls=excluded)
     return {"selected_sources_l3": selected}
 
 
@@ -354,7 +356,8 @@ async def rank_select_l4_node(state: AnalysisState) -> dict:
     queries = state.get("queries_l4", [])
     excluded = set(state.get("failed_urls_l4", []))
 
-    selected = rank_and_select(results, idea, queries, excluded_urls=excluded)
+    claim_type = state.get("type", "")
+    selected = rank_and_select(results, idea, queries, claim_type=claim_type, excluded_urls=excluded)
     return {"selected_sources_l4": selected}
 
 

@@ -4,12 +4,13 @@ No LLM. Uses domain registry for reliability + keyword TF for relevance.
 """
 import re
 from domain_registry import get_domain_meta
+from utils import get_categories_for_type
 
 
 # Reliability tier → weight
 _RELIABILITY_WEIGHTS = {
-    "reference": 3.0,
-    "established": 2.0,
+    "reference": 2.0,
+    "established": 1.5,
     "oriented": 1.0,
     "unknown": 0.5,
 }
@@ -32,10 +33,11 @@ def _snippet_relevance(snippet: str, keywords: set[str]) -> float:
     return len(overlap) / len(keywords)
 
 
-def rank_and_select(results: list[dict], idea: str, queries: list[str], min_sources: int = 4, max_sources: int = 6, excluded_urls: set[str] | None = None) -> list[dict]:
+def rank_and_select(results: list[dict], idea: str, queries: list[str], claim_type: str = "", min_sources: int = 4, max_sources: int = 6, excluded_urls: set[str] | None = None) -> list[dict]:
     """Score and rank search results. Returns top sources with metadata.
 
-    Scoring: reliability_weight * 0.6 + snippet_relevance * 0.4
+    Scoring: reliability_weight * 0.5 + snippet_relevance * 0.3 + category_boost * 0.2
+    Category boost: sources whose category matches the preferred categories for the claim type.
     If <min_sources tiered sources, fills with best unknown sources.
     """
     if excluded_urls:
@@ -45,6 +47,8 @@ def rank_and_select(results: list[dict], idea: str, queries: list[str], min_sour
     keywords = _extract_keywords(idea)
     for q in queries:
         keywords |= _extract_keywords(q)
+
+    preferred_categories = set(get_categories_for_type(claim_type))
 
     scored = []
     for r in results:
@@ -60,7 +64,8 @@ def rank_and_select(results: list[dict], idea: str, queries: list[str], min_sour
 
         rel_weight = _RELIABILITY_WEIGHTS.get(reliability, 0.5)
         snippet_score = _snippet_relevance(r.get("snippet", ""), keywords)
-        score = rel_weight * 0.6 + snippet_score * 0.4
+        category_boost = 0.2 if category in preferred_categories else 0.0
+        score = rel_weight * 0.5 + snippet_score * 0.3 + category_boost
 
         scored.append({
             "url": r["url"],

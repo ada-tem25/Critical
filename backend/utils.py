@@ -52,6 +52,12 @@ def get_categories_for_type(claim_type: str) -> list[str]:
             "press_general", "press_investigative",
             "press_economic", "audiovisual", "think_tank",
         ],
+        # Interpretive — needs academic/intellectual contextualization
+        "interpretive": [
+            "academic", "encyclopedia",
+            "press_investigative", "think_tank",
+            "press_general",
+        ],
     }
 
     return CATEGORIES_BY_TYPE.get(claim_type, [
