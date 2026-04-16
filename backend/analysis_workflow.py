@@ -51,7 +51,6 @@ class AnalysisState(TypedDict, total=False):
     all_search_results_l3: list[dict]
     selected_sources_l3: list[dict]
     extracted_passages_l3: list[dict]
-    failed_urls_l3: list[str]
     l3_loop_count: int
     l3_max_loops: int
     l3_sufficient: bool
@@ -62,7 +61,6 @@ class AnalysisState(TypedDict, total=False):
     all_search_results_l4: list[dict]
     selected_sources_l4: list[dict]
     extracted_passages_l4: list[dict]
-    failed_urls_l4: list[str]
     l4_loop_count: int
     l4_max_loops: int
     l4_sufficient: bool
@@ -234,7 +232,7 @@ async def rank_select_l3_node(state: AnalysisState) -> dict:
     results = state.get("all_search_results_l3", [])
     idea = state.get("idea", "")
     queries = state.get("queries_l3", [])
-    excluded = set(state.get("failed_urls_l3", []))
+    excluded = set(state.get("failed_urls", []))
 
     claim_type = state.get("type", "")
     selected = rank_and_select(results, idea, queries, claim_type=claim_type, excluded_urls=excluded)
@@ -252,11 +250,11 @@ async def fetch_extract_l3_node(state: AnalysisState) -> dict:
     prev = state.get("extracted_passages_l3", [])
     seen = {p["url"] for p in prev}
     new = [p for p in extracted if p["url"] not in seen and not p.get("fetch_failed")]
-    prev_failed = state.get("failed_urls_l3", [])
+    prev_failed = state.get("failed_urls", [])
 
     return {
         "extracted_passages_l3": prev + new,
-        "failed_urls_l3": prev_failed + new_failed,
+        "failed_urls": prev_failed + new_failed,
     }
 
 
@@ -354,7 +352,7 @@ async def rank_select_l4_node(state: AnalysisState) -> dict:
     results = state.get("all_search_results_l4", [])
     idea = state.get("idea", "")
     queries = state.get("queries_l4", [])
-    excluded = set(state.get("failed_urls_l4", []))
+    excluded = set(state.get("failed_urls", []))
 
     claim_type = state.get("type", "")
     selected = rank_and_select(results, idea, queries, claim_type=claim_type, excluded_urls=excluded)
@@ -372,11 +370,11 @@ async def fetch_extract_l4_node(state: AnalysisState) -> dict:
     prev = state.get("extracted_passages_l4", [])
     seen = {p["url"] for p in prev}
     new = [p for p in extracted if p["url"] not in seen and not p.get("fetch_failed")]
-    prev_failed = state.get("failed_urls_l4", [])
+    prev_failed = state.get("failed_urls", [])
 
     return {
         "extracted_passages_l4": prev + new,
-        "failed_urls_l4": prev_failed + new_failed,
+        "failed_urls": prev_failed + new_failed,
     }
 
 
@@ -507,7 +505,7 @@ def route_after_ranking_l3(state: AnalysisState) -> str:
     """After L3 ranking: skip to L3 synthesizer if no new URLs to fetch."""
     selected = {s["url"] for s in state.get("selected_sources_l3", [])}
     extracted = {p["url"] for p in state.get("extracted_passages_l3", [])}
-    failed = set(state.get("failed_urls_l3", []))
+    failed = set(state.get("failed_urls", []))
     new = selected - extracted - failed
     if len(new) == 0:
         print(f"    [ROUTER] No new L3 URLs to fetch — skipping to synthesizer L3")
@@ -541,7 +539,7 @@ def route_after_ranking_l4(state: AnalysisState) -> str:
     """After L4 ranking: skip to L4 synthesizer if no new URLs to fetch."""
     selected = {s["url"] for s in state.get("selected_sources_l4", [])}
     extracted = {p["url"] for p in state.get("extracted_passages_l4", [])}
-    failed = set(state.get("failed_urls_l4", []))
+    failed = set(state.get("failed_urls", []))
     new = selected - extracted - failed
     if len(new) == 0:
         print(f"    [ROUTER] No new L4 URLs to fetch — skipping to synthesizer L4")
