@@ -362,6 +362,7 @@ Current effects of the mode:
 |-------|-----|-------------|
 | **Decomposer** | Sonnet extracts claims (1 pass) | + Haiku Corrector reviews and corrects the claim DAG (2 passes) |
 | **Rhetoric Detector** | Sonnet detects rhetorics (1 pass) | + Sonnet Reviewer adversarially filters false positives (2 passes) |
+| **Fact-Checking Loop** | Reflection agent allows for 1 additional loop | --> Up to 2 additionnal loops |
 
 ---
 

@@ -8,5 +8,5 @@ from prompts.queries import (
     generate_queries_l3_instructions,
     generate_queries_l4_instructions,
 )
-from prompts.synthesizing import synthesizer_l2_instructions
-from prompts.reflection import reflection_agent_instructions
+from prompts.synthesizing import synthesizer_l2_instructions, synthesizer_l3_instructions
+from prompts.reflection import reflection_agent_instructions, reflection_l3_instructions
