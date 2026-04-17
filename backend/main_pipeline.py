@@ -55,8 +55,8 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
 
     # 2. Write final article
     t0 = time.perf_counter()
-    article = await write_article(normalized, analyzed_claims, rhetorics)
-    all_metrics["writer"] = {"duration": time.perf_counter() - t0}
+    writer_result, writer_metrics = await write_article(normalized, analyzed_claims, rhetorics)
+    all_metrics["writer"] = {"duration": time.perf_counter() - t0, "passes": writer_metrics.get("passes", [])}
 
     pipeline_duration = time.perf_counter() - pipeline_t0
     total_duration = pipeline_duration + preprocessing_duration
@@ -95,14 +95,45 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
     compute_cost(all_metrics)
     print(f"\033[1m{'='*50}\033[0m\n")
 
-    # 4. Return result --> To be changed later
+    # 3c. Print Writer output for evaluation
+    print(f"\033[1;36m{'─'*50}\033[0m")
+    print(f"\033[1;36m  ARTICLE OUTPUT\033[0m")
+    print(f"\033[1;36m{'─'*50}\033[0m")
+    print(f"\033[1m  Title:\033[0m    {writer_result['title']}")
+    if writer_result.get("subtitle"):
+        print(f"\033[1m  Subtitle:\033[0m {writer_result['subtitle']}")
+    print(f"\033[1m  Verdict:\033[0m  \033[1;33m{writer_result['verdict']}\033[0m")
+    print(f"\033[1m  Format:\033[0m   {writer_result['format']} ({len(writer_result['article'])} chars)")
+    print(f"\033[1m  Summary:\033[0m  {writer_result['summary']}")
+    if writer_result.get("quote"):
+        q = writer_result["quote"]
+        print(f'\033[1m  Quote:\033[0m    \033[3m"{q["text"]}"\033[0m — {q["author"]}, {q["date"]}')
+    print(f"\033[1;36m{'─'*50}\033[0m")
+    print(f"\033[1m  Sources ({len(writer_result['sources'])}):\033[0m")
+    for s in writer_result["sources"]:
+        print(f"    [{s['id']}] {s['title']}")
+        print(f"        \033[2m{s['url']}\033[0m")
+    print(f"\033[1;36m{'─'*50}\033[0m")
+    print(f"\033[1m  Article:\033[0m")
+    print()
+    print(writer_result["article"])
+    print()
+    print(f"\033[1;36m{'─'*50}\033[0m\n")
+
+    # 4. Return result
     return PipelineResult(
         text=normalized.text,
         source_type=normalized.source_type,
-        source_url=normalized.source_url,
-        author=normalized.author,
-        date=normalized.date,
+        source_url=writer_result["source_url"],
+        date=writer_result["date"],
         rhetorics=rhetorics,
         analyzed_claims=analyzed_claims,
-        article=article,
+        title=writer_result["title"],
+        subtitle=writer_result.get("subtitle"),
+        verdict=writer_result["verdict"],
+        summary=writer_result["summary"],
+        article=writer_result["article"],
+        format=writer_result["format"],
+        sources=writer_result["sources"],
+        quote=writer_result.get("quote"),
     )

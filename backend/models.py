@@ -30,6 +30,8 @@ class Claim(BaseModel):
 
 
 class RecommendedReading(BaseModel):
+    id: int
+    url: str = ""
     title: str
     author: str
     year: int
@@ -44,15 +46,38 @@ class AnalyzedClaim(BaseModel):
     supports: list[int]
     sources: list[Source]
     analysis: Optional[str] = None
+    perspective: str = ""
     recommended_reading: list[RecommendedReading] = []
 
 
+class ArticleSource(BaseModel):
+    id: int
+    url: str
+    title: str
+    date: str
+    bias: str
+
+class ArticleQuote(BaseModel):
+    text: str
+    author: str
+    date: str
+
+
 class PipelineResult(BaseModel):
+    # Original input
     text: str
     source_type: str
     source_url: str
-    author: str
     date: str
     rhetorics: list[Rhetoric]
     analyzed_claims: list[AnalyzedClaim]
+
+    # Writer output
+    title: str
+    subtitle: Optional[str] = None
+    verdict: str
+    summary: str
     article: str
+    format: str  # "short" or "long"
+    sources: list[ArticleSource]
+    quote: Optional[ArticleQuote] = None

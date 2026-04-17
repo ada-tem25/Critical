@@ -64,6 +64,7 @@ class AnalysisState(TypedDict, total=False):
     l4_loop_count: int
     l4_max_loops: int
     l4_sufficient: bool
+    perspective: str
     recommended_reading: list[dict]
 
     # Final output
@@ -429,15 +430,12 @@ async def synthesizer_l4_node(state: AnalysisState) -> dict:
     has_substance = bool(result["summary"].strip())
 
     update = {
+        "perspective": result["summary"],
         "recommended_reading": result.get("recommended_reading", []),
         "sources": prev_sources + l4_sources,
         "analyzed": has_substance,
         "passes": state.get("passes", []) + metrics.get("passes", []),
     }
-
-    # For D/interpretive entering L4 directly (no L2/L3), write summary
-    if not state.get("summary") and not state.get("analysis"):
-        update["summary"] = result["summary"]
 
     return update
 
@@ -682,6 +680,7 @@ async def run_analysis(claim: Claim, child_results: list[dict], country: str = "
         supports=claim.supports,
         sources=[],  # TODO: convert result["sources"] to Source objects
         analysis=result.get("analysis"),
+        perspective=result.get("perspective", ""),
         recommended_reading=result.get("recommended_reading", []),
     )
 
