@@ -27,7 +27,7 @@ class WriterOutput(BaseModel):
     summary: str = Field(description="Short summary of the article (2-3 sentences).")
     article: str = Field(description="Full journalistic fact-check article.")
     sources: list[ArticleSource] = Field(description="Numbered sources cited in the article.")
-    quote: Optional[ArticleQuote] = Field(default=None, description="Optional key quote from the original text.")
+    quote: Optional[ArticleQuote] = Field(default=None, description="Optional key quote from the source.")
 
 
 def _build_context(normalized: NormalizedInput, analyzed_claims: list[AnalyzedClaim], rhetorics: list[Rhetoric]) -> str:

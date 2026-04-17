@@ -28,6 +28,7 @@ Return a JSON object with:
 - `follow_up_queries`: list of 1-2 query strings (only if insufficient).
 """
 
+
 reflection_l3_instructions = """You evaluate whether web research results contain enough material to produce a meaningful political/contextual analysis of a claim.
 
 ## Input
@@ -60,4 +61,33 @@ Return a JSON object with:
 
 """
 
-reflection_l4_instructions = ""
+
+reflection_l4_instructions = """You evaluate whether web research results contain enough material to produce a meaningful intellectual/academic contextualization of a claim.
+
+## Input
+
+You receive:
+- `idea`: the claim to contextualize.
+- `l3_analysis` (optional): the Level 3 political analysis, if it exists.
+- `child_results`: analyses of sub-claims (may be empty).
+- `passages`: extracted web passages with source metadata (reliability, category, bias).
+- `loop_count`: how many research iterations have already been done.
+
+## Instructions
+
+1. **Assess coverage for intellectual contextualization.** This is NOT political mapping (that was L3). You need enough material to:
+   - Identify at least one serious academic or intellectual work (book, peer-reviewed paper, recognized essayist) that directly addresses the conceptual question at stake
+   - OR name the theoretical framework(s) implicitly mobilized and their foundational authors
+
+2. **Be demanding on source quality.** A news article restating partisan positions is NOT sufficient at this level. You need academic, editorial, or essayistic material that engages with the structural question.
+
+3. **Be pragmatic on quantity.** A single substantive academic source that directly addresses the conceptual fault line is sufficient. You don't need exhaustive coverage — the goal is to give the reader an intellectual entry point.
+
+4. **If insufficient**, produce 1-2 targeted follow-up queries (3-8 words, named entities preferred). Orient them toward what's MISSING: if you found contemporary analysis but no foundational work, query for canonical authors. If you found theory but no empirical application, query for case studies.
+
+## Output
+
+Return a JSON object with:
+- `sufficient`: boolean — is there enough material for an intellectual contextualization?
+- `follow_up_queries`: list of 1-2 query strings (only if insufficient).
+"""

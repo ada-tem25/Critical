@@ -38,7 +38,7 @@ def rank_and_select(results: list[dict], idea: str, queries: list[str], claim_ty
 
     Scoring: reliability_weight * 0.5 + snippet_relevance * 0.3 + category_boost * 0.2
     Category boost: sources whose category matches the preferred categories for the claim type.
-    If <min_sources tiered sources, fills with best unknown sources.
+    If tiered sources < min_sources, fills with best unknown sources.
     """
     if excluded_urls:
         results = [r for r in results if r["url"] not in excluded_urls]
