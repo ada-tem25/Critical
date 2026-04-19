@@ -33,6 +33,7 @@ class SynthesizerOutput(BaseModel):
     claim_type: Optional[str] = Field(default=None, description="The claim type — only included when needs_next_level is true.")
     child_results: Optional[list[dict]] = Field(default=None, description="Child results — only included when needs_next_level is true.")
     recommended_reading: Optional[list[dict]] = Field(default=None, description="Academic/intellectual references — only for L4.")
+    quote: Optional[dict] = Field(default=None, description="A striking quote found in sources — only for L3. Keys: text, author, source_id.")
 
 
 async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: list[dict], sources: list[dict], previous_summary: str = "", analysis_level: str = "l2") -> tuple[dict, dict]:
@@ -91,7 +92,12 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
             result["claim_type"] = claim_type
             result["child_results"] = child_results
         if parsed.recommended_reading:
-            result["recommended_reading"] = parsed.recommended_reading
+            result["recommended_reading"] = [
+                {**r, "id": i + 1} for i, r in enumerate(parsed.recommended_reading)
+            ]
+        if parsed.quote:
+            result["quote"] = parsed.quote
+            print(f"    \033[34m[{label}]\033[0m \033[36mQuote: \033[3m\"{parsed.quote.get('text', '')}\"\033[0m\033[36m — {parsed.quote.get('author', '?')}\033[0m")
 
     print(f"    \033[34m[{label}]\033[0m \033[2mTokens: {usage.get('input_tokens', 0)} in / {usage.get('output_tokens', 0)} out\033[0m")
 

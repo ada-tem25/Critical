@@ -8,6 +8,7 @@ import time
 import httpx
 import trafilatura
 from trafilatura.settings import use_config
+from trafilatura import extract_metadata
 
 
 # Max characters per source (~800 tokens ≈ 3200 chars)
@@ -138,7 +139,14 @@ async def _fetch_single(client: httpx.AsyncClient, source: dict, keywords: set[s
 
     if extracted:
         content = _select_passages(extracted, keywords)
-        return {**source, "content": content, "fetch_failed": False, "fetch_method": "direct"}
+        date = ""
+        try:
+            meta = extract_metadata(html)
+            if meta and meta.date:
+                date = meta.date
+        except Exception:
+            pass
+        return {**source, "content": content, "date": date, "fetch_failed": False, "fetch_method": "direct"}
 
     # --- Tentative 2: Jina Reader ---
     try:
@@ -176,7 +184,14 @@ async def _fetch_single(client: httpx.AsyncClient, source: dict, keywords: set[s
             if cache_text and len(cache_text) > 500 and not _is_boilerplate(cache_text):
                 print(f"    \033[35m[FETCH]\033[0m \033[32mGoogle Cache hit {url[:60]}\033[0m")
                 content = _select_passages(cache_text, keywords)
-                return {**source, "content": content, "fetch_failed": False, "fetch_method": "google_cache"}
+                date = ""
+                try:
+                    meta = extract_metadata(cache_html)
+                    if meta and meta.date:
+                        date = meta.date
+                except Exception:
+                    pass
+                return {**source, "content": content, "date": date, "fetch_failed": False, "fetch_method": "google_cache"}
             else:
                 print(f"    \033[35m[FETCH]\033[0m \033[2mGoogle Cache empty/boilerplate {url[:60]}\033[0m")
     except Exception:

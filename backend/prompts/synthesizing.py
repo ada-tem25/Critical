@@ -77,12 +77,14 @@ You receive:
 - The disagreement is structural, not circumstantial — presenting more political viewpoints or data would not resolve it.
 Set to false in all standard cases: clear partisan debates, policy disagreements with empirical stakes, claims where counterarguments and data are sufficient to contextualize.
 
+9. **Extract a quote (optional).** If you encounter a particularly striking, concise quote from a notable person (politician, expert, public figure) in the source content that crystallizes a key aspect of the debate, include it. The quote must be **verbatim from the source content** — never paraphrase or invent. If no quote stands out, omit the `quote` field.
 
 ## Output
 
 Return a JSON object with:
-- `analysis`: your political contextualization with inline source references `[id]`. 
+- `analysis`: your political contextualization with inline source references `[id]`.
 - `needs_next_level`: boolean.
+- `quote` (optional): an object with `text` (the verbatim quote), `author` (who said it), and `source_id` (the id of the source where you found it). Omit if no quote stands out.
 """
 
 
@@ -114,9 +116,12 @@ You receive:
 
 7. **Produce recommended reading.** Extract from the sources a list of 1-2 books or major academic works that a reader could consult to explore this question further. Only include works that are real, published, and directly relevant.
 
+8. **Extract a quote (optional).** If you encounter a particularly striking, concise quote from a thinker, academic, or intellectual in the source content that crystallizes a key conceptual insight, include it. The quote must be **verbatim from the source content** — never paraphrase or invent. If no quote stands out, omit the `quote` field.
+
 ## Output
 
 Return a JSON object with:
 - `analysis`: your intellectual contextualization with inline source references `[id]`.
 - `recommended_reading`: list of objects with `title`, `author`, `year` (integer or null if unknown). Only real published works. Empty list if no serious work was found in the sources.
+- `quote` (optional): an object with `text` (the verbatim quote), `author` (who said it), and `source_id` (the id of the source where you found it). Omit if no quote stands out.
 """

@@ -6,9 +6,10 @@ Routes by verifiability, then executes the appropriate analysis branch.
 Input:  Claim + child_results
 Output: AnalyzedClaim
 """
+from typing import Optional
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from models import Claim, AnalyzedClaim
+from models import Claim, AnalyzedClaim, Source, ArticleQuote
 from nodes.generate_queries import generate_queries
 from nodes.synthesizer import synthesize
 from nodes.brave_search import brave_search
@@ -70,6 +71,7 @@ class AnalysisState(TypedDict, total=False):
     # Final output
     analyzed: bool
     sources: list[dict]
+    quote: Optional[dict]
 
     # Metrics (accumulated across nodes)
     passes: list[dict]
@@ -306,13 +308,16 @@ async def synthesizer_l3_node(state: AnalysisState) -> dict:
     l2_sources = state.get("sources", [])
     l3_sources = result["sources"]
 
-    return {
+    out = {
         "analysis": result["summary"],
         "needs_next_level": result["needs_next_level"],
         "sources": l2_sources + l3_sources,
         "analyzed": True,
         "passes": state.get("passes", []) + metrics.get("passes", []),
     }
+    if result.get("quote"):
+        out["quote"] = result["quote"]
+    return out
 
 
 # =================== L4 Nodes (Intellectual Contextualization) ================
@@ -436,6 +441,8 @@ async def synthesizer_l4_node(state: AnalysisState) -> dict:
         "analyzed": has_substance,
         "passes": state.get("passes", []) + metrics.get("passes", []),
     }
+    if result.get("quote") and not state.get("quote"):
+        update["quote"] = result["quote"]
 
     return update
 
@@ -678,10 +685,19 @@ async def run_analysis(claim: Claim, child_results: list[dict], country: str = "
         summary=result.get("summary", ""),
         analyzed=result.get("analyzed", False),
         supports=claim.supports,
-        sources=[],  # TODO: convert result["sources"] to Source objects
+        sources=[
+            Source(
+                url=s["url"],
+                title=s["title"],
+                date=s.get("date", ""),
+                bias=s.get("bias", "unknown"),
+            )
+            for s in result.get("sources", [])
+        ],
         analysis=result.get("analysis"),
         perspective=result.get("perspective", ""),
         recommended_reading=result.get("recommended_reading", []),
+        quote=ArticleQuote(text=result["quote"]["text"], author=result["quote"]["author"]) if result.get("quote") else None,
     )
 
     metrics = {"passes": result.get("passes", [])}

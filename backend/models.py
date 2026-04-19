@@ -15,7 +15,6 @@ class Source(BaseModel):
     url: str
     title: str
     date: str
-    anchor: str
     bias: str
 
 
@@ -36,6 +35,19 @@ class RecommendedReading(BaseModel):
     year: int
 
 
+class ArticleSource(BaseModel):
+    id: int
+    url: str
+    title: str
+    date: str
+    bias: str
+
+class ArticleQuote(BaseModel):
+    text: str
+    author: str
+    date: str = ""
+
+
 class AnalyzedClaim(BaseModel):
     claim_id: int
     idea: str
@@ -47,19 +59,7 @@ class AnalyzedClaim(BaseModel):
     analysis: Optional[str] = None
     perspective: str = ""
     recommended_reading: list[RecommendedReading] = []
-
-
-class ArticleSource(BaseModel):
-    id: int
-    url: str
-    title: str
-    date: str
-    bias: str
-
-class ArticleQuote(BaseModel):
-    text: str
-    author: str
-    date: str
+    quote: Optional[ArticleQuote] = None
 
 
 class PipelineResult(BaseModel):
@@ -67,6 +67,7 @@ class PipelineResult(BaseModel):
     text: str
     source_type: str
     source_url: str
+    author: str
     date: str
     rhetorics: list[Rhetoric]
     analyzed_claims: list[AnalyzedClaim]

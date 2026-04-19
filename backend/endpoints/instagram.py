@@ -29,6 +29,7 @@ class InstagramTranscriptionRequest(BaseModel):
     """Request model for Instagram transcription, sent by the frontend"""
     url: str
     mode: str = "eco"
+    target_language: str = "French"
 
     @field_validator('url')
     @classmethod
@@ -192,7 +193,7 @@ async def transcribe_instagram(request: InstagramTranscriptionRequest):
                 author=metadata.get('uploader', ''),
                 date_str=metadata.get('upload_date', ''),
             )
-            await run_pipeline(normalized, preprocessing_duration=preprocessing_duration, mode=request.mode)
+            await run_pipeline(normalized, preprocessing_duration=preprocessing_duration, mode=request.mode, target_language=request.target_language)
 
         return InstagramTranscriptionResponse(
             status="completed",

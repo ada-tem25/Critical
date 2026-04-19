@@ -13,6 +13,7 @@ router = APIRouter()
 class TextInputRequest(BaseModel):
     text: str
     mode: str = "eco"
+    target_language: str = "French"
 
 
 class TextInputResponse(BaseModel):
@@ -33,7 +34,7 @@ async def receive_text(request: TextInputRequest):
         )
 
     normalized = normalize(text=text, source_type="text")
-    await run_pipeline(normalized, mode=request.mode)
+    await run_pipeline(normalized, mode=request.mode, target_language=request.target_language)
 
     return TextInputResponse(
         status="ok",

@@ -16,7 +16,7 @@ from utils import format_duration
 
 # =================== Main entry point ========================================
 
-async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: float = 0.0, mode: str = "eco", injected_claims: list[Claim] | None = None) -> PipelineResult:
+async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: float = 0.0, mode: str = "eco", target_language: str = "French", injected_claims: list[Claim] | None = None) -> PipelineResult:
     """Runs the full main pipeline from a NormalizedInput to final article.
     preprocessing_duration: time spent before the pipeline (scraping, transcription, etc.)
     mode: 'eco' (default) or 'performance' (enables the decomposition correction for now).
@@ -55,7 +55,7 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
 
     # 2. Write final article
     t0 = time.perf_counter()
-    writer_result, writer_metrics = await write_article(normalized, analyzed_claims, rhetorics)
+    writer_result, writer_metrics = await write_article(normalized, analyzed_claims, rhetorics, target_language=target_language)
     all_metrics["writer"] = {"duration": time.perf_counter() - t0, "passes": writer_metrics.get("passes", [])}
 
     pipeline_duration = time.perf_counter() - pipeline_t0
@@ -124,8 +124,9 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
     return PipelineResult(
         text=normalized.text,
         source_type=normalized.source_type,
-        source_url=writer_result["source_url"],
-        date=writer_result["date"],
+        source_url=normalized.source_url,
+        author=normalized.author,
+        date=normalized.date,
         rhetorics=rhetorics,
         analyzed_claims=analyzed_claims,
         title=writer_result["title"],

@@ -15,6 +15,7 @@ class InjectClaimsRequest(BaseModel):
     text: str
     claims: list[Claim]
     mode: str = "eco"
+    target_language: str = "English"
 
 
 @router.post("/api/inject-claims")
@@ -34,7 +35,7 @@ async def inject_claims(request: InjectClaimsRequest):
     for c in request.claims:
         print(f"  #{c.id} [{c.verifiability}/{c.type}] ({c.role}) {c.idea}")
 
-    result = await run_pipeline(normalized, mode=request.mode, injected_claims=request.claims)
+    result = await run_pipeline(normalized, mode=request.mode, target_language=request.target_language, injected_claims=request.claims)
 
     return {
         "status": "ok",

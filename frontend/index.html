@@ -23,6 +23,14 @@
                 </div>
             </div>
 
+            <div class="mode-toggle">
+                <div class="mode-toggle-track" id="lang-track">
+                    <div class="slider"></div>
+                    <button id="lang-fr" class="mode-btn active">Français</button>
+                    <button id="lang-en" class="mode-btn">English</button>
+                </div>
+            </div>
+
             <section class="input-section">
                 <!-- Instagram URL transcription -->
                 <div class="instagram-section">
@@ -122,6 +130,25 @@
             modeTrack.classList.add('performance');
         });
 
+        // Language toggle
+        let currentLanguage = 'French';
+        const langFr = document.getElementById('lang-fr');
+        const langEn = document.getElementById('lang-en');
+        const langTrack = document.getElementById('lang-track');
+
+        langFr.addEventListener('click', () => {
+            currentLanguage = 'French';
+            langFr.classList.add('active');
+            langEn.classList.remove('active');
+            langTrack.classList.remove('performance');
+        });
+        langEn.addEventListener('click', () => {
+            currentLanguage = 'English';
+            langEn.classList.add('active');
+            langFr.classList.remove('active');
+            langTrack.classList.add('performance');
+        });
+
         // FR: Gestion de la transcription Instagram
         const instagramButton = document.getElementById('instagram-button');
         const instagramUrl = document.getElementById('instagram-url');
@@ -147,7 +174,7 @@
                 const response = await fetch('/api/transcribe/instagram', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url, mode: currentMode })
+                    body: JSON.stringify({ url: url, mode: currentMode, target_language: currentLanguage })
                 });
 
                 const data = await response.json();
@@ -210,7 +237,7 @@
                 const response = await fetch('/api/text', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: text, mode: currentMode })
+                    body: JSON.stringify({ text: text, mode: currentMode, target_language: currentLanguage })
                 });
 
                 const data = await response.json();
@@ -274,7 +301,7 @@
                 const response = await fetch('/api/inject-claims', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text, claims, mode: currentMode })
+                    body: JSON.stringify({ text, claims, mode: currentMode, target_language: currentLanguage })
                 });
                 const data = await response.json();
 
