@@ -33,18 +33,18 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
             claims = injected_claims
             country = "FR"
         else:
-            claims, country, decomposer_metrics = await decompose(normalized, correct=(mode == "performance"))
+            claims, country, decomposer_metrics = await decompose(normalized, correct=True)
             all_metrics["decomposer"] = decomposer_metrics
 
         t0 = time.perf_counter()
-        analyzed, orchestrator_metrics = await orchestrate(claims, country, mode=mode)
+        analyzed, orchestrator_metrics = await orchestrate(claims, country, mode=mode, target_language=target_language)
         all_metrics["orchestrator"] = {"duration": time.perf_counter() - t0, "passes": orchestrator_metrics.get("passes", [])}
         return analyzed
 
     async def _detect_rhetorics():
         if injected_claims is not None:
             return []
-        result, rhetoric_metrics = await detect_rhetorics(normalized, correct=(mode == "performance"))
+        result, rhetoric_metrics = await detect_rhetorics(normalized, correct=True)
         all_metrics["rhetoric_detector"] = rhetoric_metrics
         return result
 

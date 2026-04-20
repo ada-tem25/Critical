@@ -89,14 +89,14 @@ def _build_child_results(claim: Claim, results: dict[int, AnalyzedClaim], all_cl
     return child_results
 
 
-async def _analyze_claim(claim: Claim, child_results: list[dict], country: str, mode: str = "eco") -> tuple[AnalyzedClaim, dict]:
+async def _analyze_claim(claim: Claim, child_results: list[dict], country: str, mode: str = "eco", target_language: str = "French") -> tuple[AnalyzedClaim, dict]:
     """Sends a claim through the Analysis Workflow.
     Rate-limit retry is handled by each LLM agent individually."""
     print(f"    \033[1m→ Analyzing #{claim.id} [{claim.verifiability}/{claim.type}]\033[0m with {len(child_results)} child results")
-    return await run_analysis(claim, child_results, country, mode=mode)
+    return await run_analysis(claim, child_results, country, mode=mode, target_language=target_language)
 
 
-async def orchestrate(claims: list[Claim], country: str = "INT", mode: str = "eco") -> tuple[list[AnalyzedClaim], dict]:
+async def orchestrate(claims: list[Claim], country: str = "INT", mode: str = "eco", target_language: str = "French") -> tuple[list[AnalyzedClaim], dict]:
     """Deterministic orchestrator. Categorizes claims, computes topological order,
     and dispatches analysis level by level. Returns (analyzed_claims, metrics)."""
 
@@ -145,7 +145,7 @@ async def orchestrate(claims: list[Claim], country: str = "INT", mode: str = "ec
         # tasks = []
         # for c in level_claims:
         #     child_results = _build_child_results(c, results, all_claims_for_lookup)
-        #     tasks.append(_analyze_claim(c, child_results, country, mode=mode))
+        #     tasks.append(_analyze_claim(c, child_results, country, mode=mode, target_language=target_language))
         # level_results = await asyncio.gather(*tasks)
         # for analyzed_claim, _metrics in level_results:
         #     results[analyzed_claim.claim_id] = analyzed_claim
@@ -158,7 +158,7 @@ async def orchestrate(claims: list[Claim], country: str = "INT", mode: str = "ec
         # === MODE SÉQUENTIEL (actif) ===
         for c in level_claims:
             child_results = _build_child_results(c, results, all_claims_for_lookup)
-            analyzed_claim, _metrics = await _analyze_claim(c, child_results, country, mode=mode)
+            analyzed_claim, _metrics = await _analyze_claim(c, child_results, country, mode=mode, target_language=target_language)
             results[analyzed_claim.claim_id] = analyzed_claim
             all_passes.extend(_metrics.get("passes", []))
             done += 1

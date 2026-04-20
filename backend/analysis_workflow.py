@@ -31,6 +31,7 @@ class AnalysisState(TypedDict, total=False):
     child_results: list[dict]
 
     country: str                # ISO code: "FR", "US", "INT", etc.
+    target_language: str         # "French", "English", etc.
 
     # L2 intermediate fields
     queries_l2: list[str]
@@ -302,6 +303,7 @@ async def synthesizer_l3_node(state: AnalysisState) -> dict:
         sources=passages,
         previous_summary=state.get("summary", ""),
         analysis_level="l3",
+        target_language=state.get("target_language", "French"),
     )
 
     # Merge L2 and L3 cited sources
@@ -425,6 +427,7 @@ async def synthesizer_l4_node(state: AnalysisState) -> dict:
         sources=passages,
         previous_summary=state.get("analysis", ""),  # L3 analysis if coming from D/opinion → L3 → L4
         analysis_level="l4",
+        target_language=state.get("target_language", "French"),
     )
 
     # Merge previous sources with L4 cited sources
@@ -653,7 +656,7 @@ def _l4_max_loops(verifiability: str, claim_type: str, mode: str) -> int:
     return 0
 
 
-async def run_analysis(claim: Claim, child_results: list[dict], country: str = "INT", mode: str = "eco") -> tuple[AnalyzedClaim, dict]:
+async def run_analysis(claim: Claim, child_results: list[dict], country: str = "INT", mode: str = "eco", target_language: str = "French") -> tuple[AnalyzedClaim, dict]:
     """Runs the analysis workflow for a single claim.
     Takes a Claim + child_results + country, returns (AnalyzedClaim, metrics)."""
 
@@ -667,6 +670,7 @@ async def run_analysis(claim: Claim, child_results: list[dict], country: str = "
         "supports": claim.supports,
         "child_results": child_results,
         "country": country,
+        "target_language": target_language,
         "passes": [],
         "loop_count": 0,
         "max_loops": 1 if mode == "eco" else 2,

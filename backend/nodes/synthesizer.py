@@ -36,13 +36,14 @@ class SynthesizerOutput(BaseModel):
     quote: Optional[dict] = Field(default=None, description="A striking quote found in sources — only for L3. Keys: text, author, source_id.")
 
 
-async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: list[dict], sources: list[dict], previous_summary: str = "", analysis_level: str = "l2") -> tuple[dict, dict]:
+async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: list[dict], sources: list[dict], previous_summary: str = "", analysis_level: str = "l2", target_language: str = "French") -> tuple[dict, dict]:
     """LLM agent. Analyzes the solidity of the author's argument based on sources.
     analysis_level: "l2", "l3", or "l4" — selects the prompt instructions.
     Returns ({summary, needs_next_level, sources, recommended_reading?, ...}, metrics)."""
 
     label = "SYNTHESIZER" if analysis_level == "l2" else f"SYNTHESIZER {analysis_level.upper()}"
-    instructions = _INSTRUCTIONS[analysis_level]
+    raw_instructions = _INSTRUCTIONS[analysis_level]
+    instructions = raw_instructions.format(target_language=target_language) if analysis_level != "l2" else raw_instructions
 
     claim_context = {
         "idea": idea,

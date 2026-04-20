@@ -10,7 +10,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 from normalizer import NormalizedInput
-from models import AnalyzedClaim, Rhetoric, ArticleQuote
+from models import AnalyzedClaim, Rhetoric
 from prompts.writer import writer_instructions
 from llm_retry import llm_call_with_retry
 
@@ -26,8 +26,7 @@ class WriterOutput(BaseModel):
     subtitle: Optional[str] = Field(default=None, description="Optional subtitle.")
     verdict: str = Field(description="Displayed verdict: VRAI, FAUX, INCERTAIN, TROMPEUR, etc.")
     summary: str = Field(description="Short summary of the article (2-3 sentences).")
-    article: str = Field(description="Full journalistic fact-check article with *N source citations.")
-    quote: Optional[ArticleQuote] = Field(default=None, description="Optional key quote from the source.")
+    article: str = Field(description="Full journalistic fact-check article with *N source citations and optional ~N quote marker.")
     rationale: str = Field(default="", description="Concrete problems encountered in the inputs during writing.")
 
 
@@ -74,6 +73,30 @@ def _extract_cited_sources(article: str, registry: list[dict]) -> list[dict]:
             print(f"    \033[2m[*{s['id']}] {s['title']} — {s['url']}\033[0m")
 
     return cited
+
+
+def _extract_quote(article: str, analyzed_claims: list[AnalyzedClaim]) -> Optional[dict]:
+    """Scans article for a ~N marker and resolves it to the quote from the referenced claim."""
+    matches = re.findall(r'~(\d+)', article)
+    if not matches:
+        return None
+
+    claim_id = int(matches[0])
+    if len(matches) > 1:
+        print(f"\033[35m[WRITER]\033[0m \033[33mWarning: multiple ~N markers found, using first (~{claim_id})\033[0m")
+
+    claims_by_id = {c.claim_id: c for c in analyzed_claims}
+    claim = claims_by_id.get(claim_id)
+
+    if not claim:
+        print(f"\033[35m[WRITER]\033[0m \033[33mWarning: ~{claim_id} references non-existent claim\033[0m")
+        return None
+    if not claim.quote:
+        print(f"\033[35m[WRITER]\033[0m \033[33mWarning: ~{claim_id} references claim with no quote\033[0m")
+        return None
+
+    print(f"\033[35m[WRITER]\033[0m Quote (~{claim_id}): \033[3m\"{claim.quote.text}\"\033[0m — {claim.quote.author}")
+    return {"text": claim.quote.text, "author": claim.quote.author, "date": claim.quote.date}
 
 
 def _build_context(normalized: NormalizedInput, analyzed_claims: list[AnalyzedClaim], rhetorics: list[Rhetoric], registry: list[dict], url_to_id: dict) -> str:
@@ -161,6 +184,9 @@ async def write_article(normalized: NormalizedInput, analyzed_claims: list[Analy
         # Post-processing: build sources list from registry based on *N citations
         cited_sources = _extract_cited_sources(article_text, registry)
 
+        # Post-processing: resolve ~N quote marker
+        quote = _extract_quote(article_text, analyzed_claims)
+
         result = {
             "title": parsed.title,
             "subtitle": parsed.subtitle,
@@ -169,11 +195,9 @@ async def write_article(normalized: NormalizedInput, analyzed_claims: list[Analy
             "article": article_text,
             "format": "long" if len(article_text) >= 2000 else "short",
             "sources": cited_sources,
-            "quote": parsed.quote.model_dump() if parsed.quote else None,
+            "quote": quote,
         }
         print(f"\033[35m[WRITER]\033[0m Verdict: {parsed.verdict} | Format: {result['format']} | {len(article_text)} chars")
-        if parsed.quote:
-            print(f"\033[35m[WRITER]\033[0m Quote: \033[3m\"{parsed.quote.text}\"\033[0m — {parsed.quote.author}")
         if parsed.rationale:
             print(f"\033[35m[WRITER]\033[0m \033[33mRationale:\033[0m\n{parsed.rationale}")
 
