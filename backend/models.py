@@ -2,7 +2,8 @@
 Pydantic models shared across the pipeline.
 """
 from typing import Optional
-from pydantic import BaseModel
+from uuid import uuid4
+from pydantic import BaseModel, Field
 
 
 class Rhetoric(BaseModel):
@@ -63,6 +64,7 @@ class AnalyzedClaim(BaseModel):
 
 
 class PipelineResult(BaseModel):
+    id: str = Field(default_factory=lambda: uuid4().hex[:12])
     # Original input
     text: str
     source_type: str
