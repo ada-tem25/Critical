@@ -227,6 +227,11 @@ export const getFallacy = (label: string): RhetoricFallacy | undefined => {
   return labelIndex.get(label.toLowerCase().trim());
 };
 
+/** Look up a fallacy by its snake_case name. Used when parsing **name** markers from the backend Writer. */
+export const getFallacyByName = (name: string): RhetoricFallacy | undefined => {
+  return catalog[name];
+};
+
 /** Get full catalog (e.g. for listing all known fallacies) */
 export const getAllFallacies = (): RhetoricFallacy[] => Object.values(catalog);
 

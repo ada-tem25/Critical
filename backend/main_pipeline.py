@@ -3,7 +3,9 @@ Main Pipeline — Layer 1.
 Orchestrates: Normalizer → (Rhetoric Detector || Decomposer → Orchestrator) → Writer.
 """
 import asyncio
+import json
 import time
+from pathlib import Path
 from normalizer import NormalizedInput
 from models import Claim, PipelineResult
 from nodes.decomposer import decompose
@@ -120,15 +122,12 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
     print()
     print(f"\033[1;36m{'─'*50}\033[0m\n")
 
-    # 4. Return result
-    return PipelineResult(
-        text=normalized.text,
+    # 4. Build result & auto-save to outputs/
+    result = PipelineResult(
         source_type=normalized.source_type,
         source_url=normalized.source_url,
         author=normalized.author,
         date=normalized.date,
-        rhetorics=rhetorics,
-        analyzed_claims=analyzed_claims,
         title=writer_result["title"],
         subtitle=writer_result.get("subtitle"),
         verdict=writer_result["verdict"],
@@ -138,3 +137,12 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
         sources=writer_result["sources"],
         quote=writer_result.get("quote"),
     )
+
+    #Writing the output article
+    outputs_dir = Path(__file__).parent / "outputs"
+    outputs_dir.mkdir(exist_ok=True)
+    output_path = outputs_dir / f"{result.id}.json"
+    output_path.write_text(json.dumps(result.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\033[1m[PIPELINE]\033[0m Output saved to \033[4m{output_path}\033[0m")
+
+    return result

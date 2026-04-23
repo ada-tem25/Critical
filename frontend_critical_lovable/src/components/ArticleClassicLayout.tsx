@@ -6,11 +6,27 @@ import ArticleFeedback from "@/components/ArticleFeedback";
 import ArticlePinButton from "@/components/ArticlePinButton";
 import { ExternalLink } from "lucide-react";
 
+const QUOTE_MARKER = /^~\d+$/;
+
 const ArticleClassicLayout = ({ article }: { article: ArticleData }) => {
   const paragraphs = splitParagraphs(article.article);
 
-  // Insert quote after ~40% of paragraphs
-  const quoteAfter = Math.floor(paragraphs.length * 0.4);
+  // If no ~N marker exists but a quote is present, fall back to ~40% position
+  const hasQuoteMarker = paragraphs.some((p) => QUOTE_MARKER.test(p.trim()));
+  const fallbackQuoteAfter = !hasQuoteMarker && article.quote
+    ? Math.floor(paragraphs.length * 0.4)
+    : -1;
+
+  const renderQuote = () => article.quote ? (
+    <blockquote className="my-8 py-6 border-t border-b border-rule text-center">
+      <p className="font-display text-xl md:text-2xl italic text-foreground leading-snug mb-3 px-4">
+        « {article.quote.text} »
+      </p>
+      <cite className="font-ui text-sm text-muted-foreground not-italic">
+        — {article.quote.author}
+      </cite>
+    </blockquote>
+  ) : null;
 
   return (
     <article className="max-w-2xl mx-auto px-6 py-10 animate-fade-up">
@@ -49,25 +65,23 @@ const ArticleClassicLayout = ({ article }: { article: ArticleData }) => {
 
       {/* Content paragraphs */}
       <div className="space-y-5">
-        {paragraphs.map((p, i) => (
-          <div key={i}>
-            <p className="font-body text-[16px] leading-[1.8] text-foreground">
-              <SourceInlineRef text={p} sources={article.sources} />
-            </p>
+        {paragraphs.map((p, i) => {
+          // ~N marker → render quote here
+          if (QUOTE_MARKER.test(p.trim())) {
+            return <div key={i}>{renderQuote()}</div>;
+          }
 
-            {/* Embedded quote */}
-            {i === quoteAfter && article.quote && (
-              <blockquote className="my-8 py-6 border-t border-b border-rule text-center">
-                <p className="font-display text-xl md:text-2xl italic text-foreground leading-snug mb-3 px-4">
-                  « {article.quote.text} »
-                </p>
-                <cite className="font-ui text-sm text-muted-foreground not-italic">
-                  — {article.quote.author}
-                </cite>
-              </blockquote>
-            )}
-          </div>
-        ))}
+          return (
+            <div key={i}>
+              <p className="font-body text-[16px] leading-[1.8] text-foreground">
+                <SourceInlineRef text={p} sources={article.sources} />
+              </p>
+
+              {/* Fallback quote position for legacy articles without ~N */}
+              {i === fallbackQuoteAfter && renderQuote()}
+            </div>
+          );
+        })}
       </div>
 
       {/* Sources */}

@@ -137,7 +137,7 @@ async def _fetch_single(client: httpx.AsyncClient, source: dict, keywords: set[s
     except Exception as e:
         print(f"    \033[35m[FETCH]\033[0m \033[31mFailed {url}: {type(e).__name__}\033[0m")
 
-    if extracted:
+    if extracted and len(extracted) > 200 and not _is_boilerplate(extracted):
         content = _select_passages(extracted, keywords)
         date = ""
         try:
@@ -147,6 +147,7 @@ async def _fetch_single(client: httpx.AsyncClient, source: dict, keywords: set[s
         except Exception:
             pass
         return {**source, "content": content, "date": date, "fetch_failed": False, "fetch_method": "direct"}
+    print(f"    \033[35m[FETCH]\033[0m \033[2mTrafilatura boilerplate ({len(extracted)}c) {url}\033[0m")
 
     # --- Tentative 2: Jina Reader ---
     try:

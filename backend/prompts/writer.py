@@ -60,7 +60,7 @@ Typical structure (adapt freely):
 You receive a pre-numbered `source_registry`. Each claim in `analyzed_claims` includes a `source_ids` array pointing to its relevant sources in the registry.
 When you discuss a claim's findings, always cite the source(s) backing it by placing `*N` (where N is the source's registry id) immediately after the supported passage. Never skip citing sources when discussing an analyzed claim.
 If you need to name a source in your prose (e.g., "selon Le Monde"), consult the `source_registry` to find which title corresponds to which id — then write "selon Le Monde*3" (where 3 is that source's registry id).
-Never invent a source id. Only use ids present in the `source_registry`.
+Never invent a source id. Only use ids present in the `source_registry`. Even for the longest articles, try not to go above 10 sources, prioritise the most substantial ones. 
 
 > The frontend renders `*N` as a hoverable element giving the reader access to all source metadata.
 

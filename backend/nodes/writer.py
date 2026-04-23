@@ -50,8 +50,8 @@ def _build_source_registry(analyzed_claims: list[AnalyzedClaim]) -> tuple[list[d
     return registry, url_to_id
 
 
-def _extract_cited_sources(article: str, registry: list[dict]) -> list[dict]:
-    """Scans article for *N markers and returns the cited sources from the registry."""
+def _extract_cited_sources(article: str, registry: list[dict]) -> tuple[list[dict], str]:
+    """Scans article for *N markers, renumbers them sequentially from 1, and returns (cited_sources, updated_article)."""
     cited_ids = {int(m) for m in re.findall(r'\*(\d+)', article)}
     registry_by_id = {s["id"]: s for s in registry}
 
@@ -59,7 +59,14 @@ def _extract_cited_sources(article: str, registry: list[dict]) -> list[dict]:
     if invalid:
         print(f"\033[35m[WRITER]\033[0m \033[33mWarning: invalid source ids in article: {invalid}\033[0m")
 
-    cited = [registry_by_id[sid] for sid in sorted(cited_ids) if sid in registry_by_id]
+    old_to_new = {old_id: new_id for new_id, old_id in enumerate(sorted(cited_ids & set(registry_by_id.keys())), 1)}
+
+    cited = []
+    for old_id, new_id in sorted(old_to_new.items(), key=lambda x: x[1]):
+        s = {**registry_by_id[old_id], "id": new_id}
+        cited.append(s)
+
+    updated_article = re.sub(r'\*(\d+)', lambda m: f"*{old_to_new[int(m.group(1))]}" if int(m.group(1)) in old_to_new else m.group(0), article)
 
     print(f"\033[35m[WRITER]\033[0m Sources cited in article ({len(cited)}/{len(registry)}):")
     for s in cited:
@@ -72,7 +79,7 @@ def _extract_cited_sources(article: str, registry: list[dict]) -> list[dict]:
         for s in uncited:
             print(f"    \033[2m[*{s['id']}] {s['title']} — {s['url']}\033[0m")
 
-    return cited
+    return cited, updated_article
 
 
 def _extract_quote(article: str, analyzed_claims: list[AnalyzedClaim]) -> Optional[dict]:
@@ -182,7 +189,7 @@ async def write_article(normalized: NormalizedInput, analyzed_claims: list[Analy
         article_text = parsed.article
 
         # Post-processing: build sources list from registry based on *N citations
-        cited_sources = _extract_cited_sources(article_text, registry)
+        cited_sources, article_text = _extract_cited_sources(article_text, registry)
 
         # Post-processing: resolve ~N quote marker
         quote = _extract_quote(article_text, analyzed_claims)

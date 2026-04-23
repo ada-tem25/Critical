@@ -8,12 +8,14 @@ import ArticlePinButton from "@/components/ArticlePinButton";
 import { ExternalLink } from "lucide-react";
 
 const CHART_COLORS = ["hsl(145, 50%, 36%)", "hsl(0, 55%, 48%)", "hsl(38, 60%, 50%)"];
+const QUOTE_MARKER = /^~\d+$/;
 
 const ArticleNewspaperLayout = ({ article }: { article: ArticleData }) => {
   const paragraphs = splitParagraphs(article.article);
 
-  // Split content for 2 columns
-  const mid = Math.ceil(paragraphs.length / 2);
+  // Split content for 2 columns (skip ~N markers when computing split)
+  const contentParagraphs = paragraphs.filter((p) => !QUOTE_MARKER.test(p.trim()));
+  const mid = Math.ceil(contentParagraphs.length / 2);
   const colLeft = paragraphs.slice(0, mid);
   const colRight = paragraphs.slice(mid);
 
@@ -53,32 +55,42 @@ const ArticleNewspaperLayout = ({ article }: { article: ArticleData }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
         {/* Left column */}
         <div className="space-y-4">
-          {colLeft.map((p, i) => (
-            <p key={i} className="font-body text-[15px] leading-relaxed text-foreground text-justify">
-              <SourceInlineRef text={p} sources={article.sources} rhetoricSide="left" />
-            </p>
-          ))}
-
-          {/* Embedded quote */}
-          {article.quote && (
-            <blockquote className="my-6 border-l-3 border-accent pl-4 py-2">
-              <p className="font-display text-lg italic text-foreground leading-snug mb-2">
-                « {article.quote.text} »
+          {colLeft.map((p, i) =>
+            QUOTE_MARKER.test(p.trim()) && article.quote ? (
+              <blockquote key={i} className="my-6 border-l-3 border-accent pl-4 py-2">
+                <p className="font-display text-lg italic text-foreground leading-snug mb-2">
+                  « {article.quote.text} »
+                </p>
+                <cite className="font-ui text-sm text-muted-foreground not-italic">
+                  — {article.quote.author}
+                </cite>
+              </blockquote>
+            ) : (
+              <p key={i} className="font-body text-[15px] leading-relaxed text-foreground text-justify">
+                <SourceInlineRef text={p} sources={article.sources} rhetoricSide="left" />
               </p>
-              <cite className="font-ui text-sm text-muted-foreground not-italic">
-                — {article.quote.author}
-              </cite>
-            </blockquote>
+            )
           )}
         </div>
 
         {/* Right column */}
         <div className="space-y-4">
-          {colRight.map((p, i) => (
-            <p key={i} className="font-body text-[15px] leading-relaxed text-foreground text-justify">
-              <SourceInlineRef text={p} sources={article.sources} />
-            </p>
-          ))}
+          {colRight.map((p, i) =>
+            QUOTE_MARKER.test(p.trim()) && article.quote ? (
+              <blockquote key={i} className="my-6 border-l-3 border-accent pl-4 py-2">
+                <p className="font-display text-lg italic text-foreground leading-snug mb-2">
+                  « {article.quote.text} »
+                </p>
+                <cite className="font-ui text-sm text-muted-foreground not-italic">
+                  — {article.quote.author}
+                </cite>
+              </blockquote>
+            ) : (
+              <p key={i} className="font-body text-[15px] leading-relaxed text-foreground text-justify">
+                <SourceInlineRef text={p} sources={article.sources} />
+              </p>
+            )
+          )}
 
           {/* Embedded chart */}
           {article.chartData && (

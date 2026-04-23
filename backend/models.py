@@ -66,13 +66,10 @@ class AnalyzedClaim(BaseModel):
 class PipelineResult(BaseModel):
     id: str = Field(default_factory=lambda: uuid4().hex[:12])
     # Original input
-    text: str
     source_type: str
     source_url: str
     author: str
     date: str
-    rhetorics: list[Rhetoric]
-    analyzed_claims: list[AnalyzedClaim]
 
     # Writer output
     title: str
