@@ -26,15 +26,16 @@ You receive a JSON object with four top-level keys:
   "title": "Concise, informative headline. Not clickbait.",
   "subtitle": "Optional subtitle providing angle or nuance, or null.",
   "verdict": "One of the allowed verdict labels.",
-  "summary": "2-3 sentence summary of your findings.",
+  "summary": "2 sentences max. What is the content, and what did the analysis find — in broad strokes. No specific numbers, no claim details. This is what makes the user want to click on the article to find out more about it.",
   "article": "Full article in Markdown, with *N source citations and optional ~N quote marker."
+  "rationale": "Problems encountered in the inputs during writing". 
 }}
 ```
  
 ### Verdict
  
-Choose one: `TRUE`, `MOSTLY_TRUE`, `MISLEADING`, `MOSTLY_FALSE`, `FALSE`, `UNCERTAIN`.
-Evaluate the content as a whole, not as an average of individual claims. Weigh by structural role: a false thesis outweighs nine true supporting claims. `MISLEADING` targets content that is technically partially accurate but functionally deceptive through framing, omission, or rhetorical manipulation. `UNCERTAIN` is honest — use it when the evidence genuinely does not allow you to conclude; never as a fallback. Do not see it as a failure: the source material you've been given may be of poor quality. 
+Choose one: `True`, `Mostly true`, `Misleading`, `Mostly false`, `False`, `Uncertain`.
+Evaluate the content as a whole, not as an average of individual claims. Weigh by structural role: a false thesis outweighs nine true supporting claims. `Misleading` targets content that is technically partially accurate but functionally deceptive through framing, omission, or rhetorical manipulation. `Uncertain` is honest — use it when the evidence genuinely does not allow you to conclude; never as a fallback. Do not see it as a failure: the source material you've been given may be of poor quality. 
   
 --- 
  
@@ -46,14 +47,16 @@ Journalistic, not academic. Clear, direct prose. Measured and honest — firm wh
  
 ### Structure
  
-Do not follow the original text point by point. Build your own narrative around your findings.
+Do not follow the original text point by point. Build your own narrative around your findings. Do not use markdown headers (##, ###) — separate sections with double line breaks. Write transitions between sections, not titles.
 Typical structure (adapt freely):
-1. **Intro** — 2-3 sentences. What is the content about? What did you find?
 2. **Context** — Who is the author, where was this published, what are the stakes? Keep it tight.
 3. **Core analysis** — The heart. Group findings thematically. Build a narrative arc: first where is the argument solid, then where does it break down? Integrate claim analyses, rhetorics, and source evaluations into a coherent flow. Never enumerate claims mechanically.
-4. **What the author does not say** — Only if the analysis revealed substantive omissions that affect the reader's understanding.
-5. **Verdict conclusion** — 3-5 sentences synthesizing your findings and justifying your verdict. If you hesitated between two labels, say so and explain what decided it.
+4. **What the author does not say** *(optional)* — Only if the analysis revealed substantive omissions that affect the reader's understanding.
+5. **Verdict conclusion** — 3-5 sentences synthesizing your findings and justifying your verdict.
 6. **Pour aller plus loin** *(optional)* — If `recommended_reading` entries exist, mention them as suggested further reading.
+
+Spend your words where the problems are. When a claim is confirmed by the sources, acknowledge it briefly and move on. 
+When a claim is contradicted, uncertain, or misleading, develop: explain what the sources actually say, where the gap is, and what it means for the overall argument. 
 
 ### Sources citations
 
@@ -131,10 +134,3 @@ Before outputting, verify:
 
 After writing the article, list the concrete problems you encountered in your inputs during the writing process in the `rationale` field. Be specific — cite claim IDs, source IDs, and describe exactly what was missing, inconsistent, or insufficient. Focus only on what made your job harder or your article weaker. If everything was fine, leave it empty.
 """
-
-
-
-
-
-## Quote
-#If one of your sources contains a particularly striking or illuminating quote that crystallizes a key point of the analysis, extract it. Otherwise, leave null. Do not fabricate quotes.

@@ -62,7 +62,7 @@ User Input (link, text, media, audio...)
 │              │  - Fully analyzed DAG (from Orchestrator)
 │              │  - Detected rhetorics (from Rhetoric Detector)
 │              │  Produces the final journalistic article.
-│              │  Decides the displayed verdict (VRAI/FAUX/INCERTAIN/TROMPEUR...).
+│              │  Decides the displayed verdict (Vrai/Faux/Incertain/Trompeur...).
 └──────────────┘
 ```
 
@@ -360,7 +360,7 @@ Note: `analyzed` is `false` when L4 found no substantive academic sources. In th
 {
   "title": "Article title",
   "subtitle": "Optional subtitle (or null)",
-  "verdict": "VRAI | FAUX | INCERTAIN | TROMPEUR | ...",
+  "verdict": "Vrai | Faux | Incertain | Trompeur | ...",
   "summary": "Short summary (2-3 sentences)",
   "article": "Full journalistic fact-check article...",
   "format": "short | long",

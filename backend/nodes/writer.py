@@ -24,7 +24,7 @@ llm = ChatAnthropic(model=WRITER_MODEL, temperature=0)
 class WriterOutput(BaseModel):
     title: str = Field(description="Article title.")
     subtitle: Optional[str] = Field(default=None, description="Optional subtitle.")
-    verdict: str = Field(description="Displayed verdict: VRAI, FAUX, INCERTAIN, TROMPEUR, etc.")
+    verdict: str = Field(description="Displayed verdict: Vrai, Faux, Incertain, Trompeur, etc.")
     summary: str = Field(description="Short summary of the article (2-3 sentences).")
     article: str = Field(description="Full journalistic fact-check article with *N source citations and optional ~N quote marker.")
     rationale: str = Field(default="", description="Concrete problems encountered in the inputs during writing.")
