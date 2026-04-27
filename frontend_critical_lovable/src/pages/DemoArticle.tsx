@@ -10,8 +10,7 @@ const DemoArticle = () => {
   const [searchParams] = useSearchParams();
   const lang = (searchParams.get("lang") as "fr" | "en") || "fr";
 
-  const bilingual = demoArticles.find((a) => a.fr.id === id || a.en.id === id);
-  const article = bilingual?.[lang];
+  const article = demoArticles.find((a) => a.id === id);
 
   if (!article) {
     return (

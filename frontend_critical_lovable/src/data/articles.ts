@@ -30,6 +30,7 @@ export interface ArticleData {
   summary: string;
   article: string;
   format: string; // "short" | "long"
+  language?: string; // "French" | "English" — set by the pipeline
   sources: ArticleSource[];
   quote?: { text: string; author: string; date?: string };
   // Frontend-only display hints (optional, not from backend)

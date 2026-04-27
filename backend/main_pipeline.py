@@ -134,15 +134,17 @@ async def run_pipeline(normalized: NormalizedInput, preprocessing_duration: floa
         summary=writer_result["summary"],
         article=writer_result["article"],
         format=writer_result["format"],
+        language=target_language,
         sources=writer_result["sources"],
         quote=writer_result.get("quote"),
     )
 
-    #Writing the output article
-    outputs_dir = Path(__file__).parent / "outputs"
-    outputs_dir.mkdir(exist_ok=True)
-    output_path = outputs_dir / f"{result.id}.json"
-    output_path.write_text(json.dumps(result.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\033[1m[PIPELINE]\033[0m Output saved to \033[4m{output_path}\033[0m")
+    # [DEMO ONLY] Copy result to the frontend's analyzed/ directory so it appears on the demo page.
+    # In the real app, results will be served via the API — this won't be needed.
+    frontend_analyzed_dir = Path(__file__).parent.parent / "frontend_critical_lovable" / "src" / "data" / "analyzed"
+    if frontend_analyzed_dir.exists():
+        demo_path = frontend_analyzed_dir / f"{result.id}.json"
+        demo_path.write_text(json.dumps(result.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"\033[1m[PIPELINE]\033[0m \033[2m[DEMO] Output saved to the demo frontend: \033[4m{demo_path}\033[0m")
 
     return result

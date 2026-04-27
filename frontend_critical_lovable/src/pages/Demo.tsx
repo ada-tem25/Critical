@@ -267,8 +267,12 @@ const Demo = () => {
           {t(lang, { fr: "Exemples", en: "Examples" })}
         </h2>
         <div className="flex flex-col items-center gap-8">
-          {demoArticles.map((bilingual, i) => {
-            const article = bilingual[lang];
+          {demoArticles
+            .filter((a) => {
+              if (!a.language) return true;
+              return a.language === (lang === "fr" ? "French" : "English");
+            })
+            .map((article, i) => {
             const rotation = i % 2 === 0 ? -1.2 : 1.2;
             return (
               <motion.button

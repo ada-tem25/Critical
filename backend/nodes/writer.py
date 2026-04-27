@@ -173,17 +173,6 @@ async def write_article(normalized: NormalizedInput, analyzed_claims: list[Analy
 
     if raw_response["parsed"] is None:
         print(f"\033[35m[WRITER]\033[0m \033[31mParsing failed: {raw_response.get('parsing_error')}\033[0m")
-        raw_text = raw_response["raw"].content if isinstance(raw_response["raw"].content, str) else raw_response["raw"].content[0].get("text", "")
-        result = {
-            "title": "",
-            "subtitle": None,
-            "verdict": "",
-            "summary": "",
-            "article": raw_text,
-            "format": "long" if len(raw_text) >= 2000 else "short",
-            "sources": [],
-            "quote": None,
-        }
     else:
         parsed = raw_response["parsed"]
         article_text = parsed.article

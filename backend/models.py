@@ -78,5 +78,6 @@ class PipelineResult(BaseModel):
     summary: str
     article: str
     format: str  # "short" or "long"
+    language: str  # target language, e.g. "French" or "English"
     sources: list[ArticleSource]
     quote: Optional[ArticleQuote] = None
