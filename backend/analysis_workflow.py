@@ -6,10 +6,12 @@ Routes by verifiability, then executes the appropriate analysis branch.
 Input:  Claim + child_results
 Output: AnalyzedClaim
 """
+
 from typing import Optional
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from models import Claim, AnalyzedClaim, Source, ArticleQuote
+from utils import _offset_citations
 from nodes.generate_queries import generate_queries
 from nodes.synthesizer import synthesize
 from nodes.brave_search import brave_search
@@ -311,7 +313,7 @@ async def synthesizer_l3_node(state: AnalysisState) -> dict:
     l3_sources = result["sources"]
 
     out = {
-        "analysis": result["summary"],
+        "analysis": _offset_citations(result["summary"], len(l2_sources)),
         "needs_next_level": result["needs_next_level"],
         "sources": l2_sources + l3_sources,
         "analyzed": True,
@@ -438,7 +440,7 @@ async def synthesizer_l4_node(state: AnalysisState) -> dict:
     has_substance = bool(result["summary"].strip())
 
     update = {
-        "perspective": result["summary"],
+        "perspective": _offset_citations(result["summary"], len(prev_sources)), #avant: "perspective": result["summary"]
         "recommended_reading": result.get("recommended_reading", []),
         "sources": prev_sources + l4_sources,
         "analyzed": has_substance,

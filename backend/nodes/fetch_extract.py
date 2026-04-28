@@ -147,7 +147,8 @@ async def _fetch_single(client: httpx.AsyncClient, source: dict, keywords: set[s
         except Exception:
             pass
         return {**source, "content": content, "date": date, "fetch_failed": False, "fetch_method": "direct"}
-    print(f"    \033[35m[FETCH]\033[0m \033[2mTrafilatura boilerplate ({len(extracted)}c) {url}\033[0m")
+    if extracted:
+        print(f"    \033[35m[FETCH]\033[0m \033[2mTrafilatura boilerplate ({len(extracted)}c) {url}\033[0m")
 
     # --- Tentative 2: Jina Reader ---
     try:

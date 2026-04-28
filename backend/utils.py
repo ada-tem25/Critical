@@ -1,3 +1,4 @@
+import re
 
 def format_duration(seconds: float) -> str:
     """Format duration: '1min 23s' if >= 60s, else '12.34s'."""
@@ -5,6 +6,12 @@ def format_duration(seconds: float) -> str:
         m, s = divmod(int(seconds), 60)
         return f"{m}min {s}s"
     return f"{seconds:.2f}s"
+
+def _offset_citations(text: str, offset: int) -> str:
+    """Shifts every [N] inline citation by `offset` positions."""
+    if not text or offset == 0:
+        return text
+    return re.sub(r'\[(\d+)\]', lambda m: f"[{int(m.group(1)) + offset}]", text)
 
 
 def get_categories_for_type(claim_type: str) -> list[str]:

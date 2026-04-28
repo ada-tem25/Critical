@@ -83,8 +83,16 @@ async def synthesize(claim_id: int, idea: str, claim_type: str, child_results: l
         cited_ids = {int(m) for m in re.findall(r'\[(\d+)\]', parsed.summary)}
         cited_sources = [s for s in sources if s.get("id") in cited_ids]
 
+        # Renumber inline [N] citations from pool-local ids to 1-based positions in cited_sources, so downstream consumers can map [N] → cited_sources[N-1].
+        id_to_pos = {s["id"]: i + 1 for i, s in enumerate(cited_sources)}
+        remapped_summary = re.sub(
+            r'\[(\d+)\]',
+            lambda m: f"[{id_to_pos[int(m.group(1))]}]" if int(m.group(1)) in id_to_pos else "",
+            parsed.summary,
+        )
+
         result = {
-            "summary": parsed.summary,
+            "summary": remapped_summary, #mettre parsed.summary pour revenir à avant le fix
             "needs_next_level": parsed.needs_next_level,
             "sources": cited_sources,
         }
